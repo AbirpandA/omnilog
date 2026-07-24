@@ -4,16 +4,20 @@ import { View, Text, StyleSheet, Platform } from 'react-native';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { BookMarked, Compass } from 'lucide-react-native';
+import { BookMarked, Compass, User } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { initDatabase } from './db/index';
 import { LibraryScreen } from './screens/LibraryScreen';
 import { DiscoverScreen } from './screens/DiscoverScreen';
 import { DetailsScreen, RootStackParamList } from './screens/DetailsScreen';
+import { ExpandedSuggestionsScreen } from './screens/ExpandedSuggestionsScreen';
+import { TasteProfileScreen } from './screens/TasteProfileScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const queryClient = new QueryClient();
 
 function HomeTabs() {
   return (
@@ -22,6 +26,7 @@ function HomeTabs() {
         tabBarIcon: ({ color, size }) => {
           if (route.name === 'Library') return <BookMarked color={color} size={20} />;
           if (route.name === 'Discover') return <Compass color={color} size={20} />;
+          if (route.name === 'Taste Profile') return <User color={color} size={20} />;
           return null;
         },
         tabBarBackground: () => (
@@ -51,6 +56,7 @@ function HomeTabs() {
     >
       <Tab.Screen name="Library" component={LibraryScreen} />
       <Tab.Screen name="Discover" component={DiscoverScreen} />
+      <Tab.Screen name="Taste Profile" component={TasteProfileScreen} />
     </Tab.Navigator>
   );
 }
@@ -76,13 +82,16 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer theme={DarkTheme}>
-      <StatusBar style="light" />
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="HomeTabs" component={HomeTabs} />
-        <Stack.Screen name="Details" component={DetailsScreen} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <QueryClientProvider client={queryClient}>
+      <NavigationContainer theme={DarkTheme}>
+        <StatusBar style="light" />
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="HomeTabs" component={HomeTabs} />
+          <Stack.Screen name="Details" component={DetailsScreen} />
+          <Stack.Screen name="ExpandedSuggestions" component={ExpandedSuggestionsScreen as any} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </QueryClientProvider>
   );
 }
 

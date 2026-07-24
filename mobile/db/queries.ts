@@ -1,6 +1,6 @@
 import { db } from './index';
 
-export type ReactionType = 'lame' | 'okay' | 'pure gold' | 'Absolute cinema';
+export type ReactionType = 'lame' | 'okay' | 'pure gold' | 'Absolute cinema' | 'watchlist' | 'collection';
 
 export interface MediaItem {
   id: string;
@@ -104,4 +104,8 @@ export function getLogByMediaId(mediaId: string): LogEntry | null {
   ) as LogEntry | undefined;
   
   return result || null;
+}
+
+export function deleteLog(mediaId: string): void {
+  db.runSync(`DELETE FROM user_reactions WHERE media_id = ?`, [mediaId]);
 }

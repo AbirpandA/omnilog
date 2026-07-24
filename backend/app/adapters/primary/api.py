@@ -5,27 +5,36 @@ from app.use_cases.vibe_recommendation import VibeRecommendationUseCase
 
 router = APIRouter()
 
+
 class RecommendRequest(BaseModel):
     seed_ids: List[str]
-    
+    exclude_ids: Optional[List[str]] = []
+
+
 class RecommendResponse(BaseModel):
     media_id: str
     title: str
     description: str
     poster_url: str
     similarity_score: float
+    vibe_tag: str = ""
+
 
 class SearchResponse(BaseModel):
     media_id: str
     title: str
     description: str
     poster_url: str
+    vibe_tag: str = ""
+
 
 class LatestResponse(BaseModel):
     media_id: str
     title: str
     description: str
     poster_url: str
+    vibe_tag: str = ""
+
 
 class MediaDetailsResponse(BaseModel):
     media_id: str
@@ -41,26 +50,79 @@ class MediaDetailsResponse(BaseModel):
     release_date: str
     tagline: str
 
+
+class MoodRequest(BaseModel):
+    mood: str
+    exclude_ids: Optional[List[str]] = []
+    top_n: Optional[int] = 20
+
+
 # We'll inject the usecase via FastAPI app state in main.py
 def get_use_case() -> VibeRecommendationUseCase:
     raise NotImplementedError("Dependency injected in main.py")
 
+
 @router.post("/recommend", response_model=List[RecommendResponse])
 def get_recommendations(
-    payload: RecommendRequest, 
-    use_case: VibeRecommendationUseCase = Depends(get_use_case)
+    payload: RecommendRequest,
+    top_n: int = 7,
+    use_case: VibeRecommendationUseCase = Depends(get_use_case),
 ):
-    results = use_case.execute(seed_ids=payload.seed_ids, top_n=7)
+    results = use_case.execute(
+        seed_ids=payload.seed_ids, exclude_ids=payload.exclude_ids, top_n=top_n
+    )
     return [
         RecommendResponse(
             media_id=r.media_id,
             title=r.title,
             description=r.description,
             poster_url=r.poster_url,
-            similarity_score=r.similarity_score
+            similarity_score=r.similarity_score,
+            vibe_tag=r.vibe_tag,
         )
         for r in results
     ]
+
+
+@router.post("/mood", response_model=List[RecommendResponse])
+def get_mood_recommendations(
+    payload: MoodRequest, use_case: VibeRecommendationUseCase = Depends(get_use_case)
+):
+    results = use_case.execute_mood(
+        mood_text=payload.mood, exclude_ids=payload.exclude_ids, top_n=payload.top_n
+    )
+    return [
+        RecommendResponse(
+            media_id=r.media_id,
+            title=r.title,
+            description=r.description,
+            poster_url=r.poster_url,
+            similarity_score=r.similarity_score,
+            vibe_tag=r.vibe_tag,
+        )
+        for r in results
+    ]
+
+
+@router.get("/movie/{media_id}/similar", response_model=List[RecommendResponse])
+def get_similar_movies(
+    media_id: str, use_case: VibeRecommendationUseCase = Depends(get_use_case)
+):
+    results = use_case.execute_similar(
+        media_id=media_id, exclude_ids=[media_id], top_n=10
+    )
+    return [
+        RecommendResponse(
+            media_id=r.media_id,
+            title=r.title,
+            description=r.description,
+            poster_url=r.poster_url,
+            similarity_score=r.similarity_score,
+            vibe_tag=r.vibe_tag,
+        )
+        for r in results
+    ]
+
 
 @router.get("/search", response_model=List[SearchResponse])
 def search(query: str, use_case: VibeRecommendationUseCase = Depends(get_use_case)):
@@ -70,10 +132,12 @@ def search(query: str, use_case: VibeRecommendationUseCase = Depends(get_use_cas
             media_id=r.id,
             title=r.title,
             description=r.description,
-            poster_url=r.poster_url
+            poster_url=r.poster_url,
+            vibe_tag=r.vibe_tag,
         )
         for r in results
     ]
+
 
 @router.get("/latest", response_model=List[LatestResponse])
 def get_latest(use_case: VibeRecommendationUseCase = Depends(get_use_case)):
@@ -83,13 +147,32 @@ def get_latest(use_case: VibeRecommendationUseCase = Depends(get_use_case)):
             media_id=r.id,
             title=r.title,
             description=r.description,
-            poster_url=r.poster_url
+            poster_url=r.poster_url,
+            vibe_tag=r.vibe_tag,
         )
         for r in results
     ]
 
+
+@router.get("/upcoming", response_model=List[LatestResponse])
+def get_upcoming(use_case: VibeRecommendationUseCase = Depends(get_use_case)):
+    results = use_case.media_provider.get_upcoming_movies()
+    return [
+        LatestResponse(
+            media_id=r.id,
+            title=r.title,
+            description=r.description,
+            poster_url=r.poster_url,
+            vibe_tag=r.vibe_tag,
+        )
+        for r in results
+    ]
+
+
 @router.get("/movie/{media_id}", response_model=MediaDetailsResponse)
-def get_movie_details(media_id: str, use_case: VibeRecommendationUseCase = Depends(get_use_case)):
+def get_movie_details(
+    media_id: str, use_case: VibeRecommendationUseCase = Depends(get_use_case)
+):
     details = use_case.media_provider.get_movie_details(media_id)
     if not details:
         raise HTTPException(status_code=404, detail="Movie not found")
