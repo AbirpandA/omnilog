@@ -1,16 +1,59 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { BookMarked, Search, Compass } from 'lucide-react-native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { BookMarked, Compass } from 'lucide-react-native';
+import { BlurView } from 'expo-blur';
 
 import { initDatabase } from './db/index';
 import { LibraryScreen } from './screens/LibraryScreen';
-import { SearchScreen } from './screens/SearchScreen';
 import { DiscoverScreen } from './screens/DiscoverScreen';
+import { DetailsScreen, RootStackParamList } from './screens/DetailsScreen';
 
 const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator<RootStackParamList>();
+
+function HomeTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        tabBarIcon: ({ color, size }) => {
+          if (route.name === 'Library') return <BookMarked color={color} size={20} />;
+          if (route.name === 'Discover') return <Compass color={color} size={20} />;
+          return null;
+        },
+        tabBarBackground: () => (
+          Platform.OS === 'ios' ? (
+            <BlurView tint="dark" intensity={80} style={StyleSheet.absoluteFill} />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(20,20,20,0.95)' }]} />
+          )
+        ),
+        tabBarStyle: {
+          position: 'absolute',
+          bottom: 24,
+          left: 24,
+          right: 24,
+          elevation: 0,
+          backgroundColor: 'transparent',
+          borderTopWidth: 0,
+          height: 60,
+          borderRadius: 30,
+          overflow: 'hidden',
+        },
+        tabBarShowLabel: false,
+        tabBarActiveTintColor: '#ffffff',
+        tabBarInactiveTintColor: '#666666',
+        headerShown: false,
+      })}
+    >
+      <Tab.Screen name="Library" component={LibraryScreen} />
+      <Tab.Screen name="Discover" component={DiscoverScreen} />
+    </Tab.Navigator>
+  );
+}
 
 export default function App() {
   const [dbInitialized, setDbInitialized] = useState(false);
@@ -35,27 +78,10 @@ export default function App() {
   return (
     <NavigationContainer theme={DarkTheme}>
       <StatusBar style="light" />
-      <Tab.Navigator
-        screenOptions={({ route }) => ({
-          tabBarIcon: ({ color, size }) => {
-            if (route.name === 'Library') return <BookMarked color={color} size={size} />;
-            if (route.name === 'Search') return <Search color={color} size={size} />;
-            if (route.name === 'Discover') return <Compass color={color} size={size} />;
-            return null;
-          },
-          tabBarStyle: {
-            backgroundColor: 'rgba(0,0,0,0.8)',
-            borderTopColor: 'rgba(255,255,255,0.1)',
-          },
-          tabBarActiveTintColor: '#ffffff',
-          tabBarInactiveTintColor: '#666666',
-          headerShown: false,
-        })}
-      >
-        <Tab.Screen name="Library" component={LibraryScreen} />
-        <Tab.Screen name="Search" component={SearchScreen} />
-        <Tab.Screen name="Discover" component={DiscoverScreen} />
-      </Tab.Navigator>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="HomeTabs" component={HomeTabs} />
+        <Stack.Screen name="Details" component={DetailsScreen} />
+      </Stack.Navigator>
     </NavigationContainer>
   );
 }

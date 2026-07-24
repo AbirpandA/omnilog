@@ -51,6 +51,8 @@ class VibeRecommendationUseCase:
                 RecommendationResult(
                     media_id=candidate.id,
                     title=candidate.title,
+                    description=candidate.description,
+                    poster_url=candidate.poster_url,
                     similarity_score=score
                 )
             )

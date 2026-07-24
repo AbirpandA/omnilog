@@ -11,7 +11,8 @@ export function initDatabase() {
       posterUri TEXT,
       releaseYear TEXT,
       runtime TEXT,
-      director TEXT
+      director TEXT,
+      description TEXT
     );
 
     CREATE TABLE IF NOT EXISTS user_reactions (
@@ -22,4 +23,11 @@ export function initDatabase() {
       FOREIGN KEY (media_id) REFERENCES media_items(id)
     );
   `);
+  
+  // Quick migration in case the table exists without the description column
+  try {
+    db.execSync("ALTER TABLE media_items ADD COLUMN description TEXT;");
+  } catch (e) {
+    // Ignore error if column already exists
+  }
 }

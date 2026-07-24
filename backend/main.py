@@ -1,10 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.adapters.secondary.sentence_transformer_engine import SentenceTransformerEngine
-from app.adapters.secondary.mock_tmdb_provider import MockTMDBProvider
+from app.adapters.secondary.real_tmdb_provider import RealTMDBProvider
 from app.use_cases.vibe_recommendation import VibeRecommendationUseCase
 from app.adapters.primary.api import router, get_use_case
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(title="OmniLog Hexagonal API", version="1.0.0")
 
@@ -22,7 +25,7 @@ def startup_event():
     print("Booting up OmniLog AI Engine...")
     # 1. Initialize Secondary Adapters
     vector_engine = SentenceTransformerEngine('all-MiniLM-L6-v2')
-    media_provider = MockTMDBProvider(vector_engine)
+    media_provider = RealTMDBProvider(vector_engine)
     
     # 2. Inject Adapters into the Use Case
     use_case = VibeRecommendationUseCase(

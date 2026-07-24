@@ -12,6 +12,7 @@ class CandidateMedia:
     id: str
     title: str
     description: str
+    poster_url: str
     vector: Vector
     
 @dataclass
@@ -19,4 +20,6 @@ class RecommendationResult:
     """Represents a final recommendation with its similarity score."""
     media_id: str
     title: str
+    description: str
+    poster_url: str
     similarity_score: float

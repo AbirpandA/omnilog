@@ -1,24 +1,32 @@
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Text, FlatList, ActivityIndicator, Image, ListRenderItem } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { StyleSheet, View, Text, FlatList, ActivityIndicator, Image, ListRenderItem, TouchableOpacity } from 'react-native';
 import { ThumbsDown, Meh, Sparkles, Star } from 'lucide-react-native';
 import { GlassCard } from '../components/GlassCard';
 import { getAllLogs, LogEntry, ReactionType } from '../db/queries';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from './DetailsScreen';
+
+type LibraryScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'HomeTabs'>;
 
 // Map reactions to their specific icons and colors
 const ReactionConfig: Record<ReactionType, { icon: React.ElementType, color: string, label: string }> = {
   'lame': { icon: ThumbsDown, color: '#ff4444', label: 'Lame' },
   'okay': { icon: Meh, color: '#aaaaaa', label: 'Okay' },
-  'freaking': { icon: Sparkles, color: '#ffbb33', label: 'Freaking' },
+  'pure gold': { icon: Sparkles, color: '#ffbb33', label: 'Pure Gold' },
   'Absolute cinema': { icon: Star, color: '#00C851', label: 'Absolute Cinema' }
 };
 
 export function LibraryScreen() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const navigation = useNavigation<LibraryScreenNavigationProp>();
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
 
   const loadData = () => {
     try {
@@ -36,29 +44,39 @@ export function LibraryScreen() {
     const IconComponent = config.icon;
 
     return (
-      <GlassCard style={styles.cardContainer}>
-        <View style={styles.cardContent}>
-          {item.posterUri ? (
-            <Image source={{ uri: item.posterUri }} style={styles.poster} />
-          ) : (
-            <View style={[styles.poster, styles.placeholderPoster]}>
-              <Text style={styles.placeholderText}>No Image</Text>
-            </View>
-          )}
-          
-          <View style={styles.textInfo}>
-            <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
-            <Text style={styles.subtitle}>{item.type} {item.releaseYear ? `• ${item.releaseYear}` : ''}</Text>
+      <TouchableOpacity 
+        activeOpacity={0.7}
+        onPress={() => navigation.navigate('Details', {
+          media_id: item.mediaId,
+          title: item.title,
+          description: item.description || '',
+          poster_url: item.posterUri || ''
+        })}
+      >
+        <GlassCard style={styles.cardContainer}>
+          <View style={styles.cardContent}>
+            {item.posterUri ? (
+              <Image source={{ uri: item.posterUri }} style={styles.poster} />
+            ) : (
+              <View style={[styles.poster, styles.placeholderPoster]}>
+                <Text style={styles.placeholderText}>No Image</Text>
+              </View>
+            )}
             
-            <View style={styles.reactionPill}>
-              <IconComponent color={config.color} size={16} />
-              <Text style={[styles.reactionText, { color: config.color }]}>
-                {config.label}
-              </Text>
+            <View style={styles.textInfo}>
+              <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
+              <Text style={styles.subtitle}>{item.type} {item.releaseYear ? `• ${item.releaseYear}` : ''}</Text>
+              
+              <View style={styles.reactionPill}>
+                <IconComponent color={config.color} size={16} />
+                <Text style={[styles.reactionText, { color: config.color }]}>
+                  {config.label}
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
-      </GlassCard>
+        </GlassCard>
+      </TouchableOpacity>
     );
   };
 
@@ -108,7 +126,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 16,
-    paddingBottom: 40,
+    paddingBottom: 100, // Make room for floating tab bar
   },
   cardContainer: {
     marginBottom: 16,

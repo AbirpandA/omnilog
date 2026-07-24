@@ -1,6 +1,6 @@
 import { db } from './index';
 
-export type ReactionType = 'lame' | 'okay' | 'freaking' | 'Absolute cinema';
+export type ReactionType = 'lame' | 'okay' | 'pure gold' | 'Absolute cinema';
 
 export interface MediaItem {
   id: string;
@@ -10,6 +10,7 @@ export interface MediaItem {
   releaseYear?: string;
   runtime?: string;
   director?: string;
+  description?: string;
 }
 
 export interface LogEntry {
@@ -21,6 +22,7 @@ export interface LogEntry {
   type: string;
   posterUri?: string;
   releaseYear?: string;
+  description?: string;
 }
 
 // Helper to generate a unique ID
@@ -33,8 +35,8 @@ export function insertLog(media: MediaItem, reaction: ReactionType): void {
   db.withTransactionSync(() => {
     // 1. Insert or Replace Media Item (in case they rate something again)
     db.runSync(
-      `INSERT OR REPLACE INTO media_items (id, title, type, posterUri, releaseYear, runtime, director) 
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO media_items (id, title, type, posterUri, releaseYear, runtime, director, description) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         media.id,
         media.title,
@@ -42,11 +44,15 @@ export function insertLog(media: MediaItem, reaction: ReactionType): void {
         media.posterUri || null,
         media.releaseYear || null,
         media.runtime || null,
-        media.director || null
+        media.director || null,
+        media.description || null
       ]
     );
 
-    // 2. Insert User Reaction
+    // 2. Delete any existing reaction for this media to prevent duplicates
+    db.runSync(`DELETE FROM user_reactions WHERE media_id = ?`, [media.id]);
+
+    // 3. Insert User Reaction
     const reactionId = uuid();
     const timestamp = Date.now();
     
@@ -69,11 +75,33 @@ export function getAllLogs(): LogEntry[] {
         mi.title, 
         mi.type, 
         mi.posterUri, 
-        mi.releaseYear
+        mi.releaseYear,
+        mi.description
      FROM user_reactions ur
      JOIN media_items mi ON ur.media_id = mi.id
      ORDER BY ur.updated_at DESC`
   ) as LogEntry[];
   
   return result;
+}
+
+export function getLogByMediaId(mediaId: string): LogEntry | null {
+  const result = db.getFirstSync(
+    `SELECT 
+        ur.id as reactionId, 
+        ur.reaction, 
+        ur.updated_at,
+        mi.id as mediaId, 
+        mi.title, 
+        mi.type, 
+        mi.posterUri, 
+        mi.releaseYear,
+        mi.description
+     FROM user_reactions ur
+     JOIN media_items mi ON ur.media_id = mi.id
+     WHERE ur.media_id = ?`,
+    [mediaId]
+  ) as LogEntry | undefined;
+  
+  return result || null;
 }

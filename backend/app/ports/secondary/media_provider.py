@@ -11,3 +11,7 @@ class IMediaProvider(Protocol):
     def get_candidates(self, exclude_ids: List[str], limit: int = 50) -> List[CandidateMedia]:
         """Fetches a broad list of candidates to compare against, excluding seeds."""
         ...
+        
+    def search_media(self, query: str) -> List[CandidateMedia]:
+        """Searches for media by query string."""
+        ...
