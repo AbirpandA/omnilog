@@ -1,7 +1,11 @@
-from fastapi import FastAPI
+import sys
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from loguru import logger
 from fastapi.middleware.cors import CORSMiddleware
 from app.adapters.secondary.sentence_transformer_engine import SentenceTransformerEngine
 from app.adapters.secondary.real_tmdb_provider import RealTMDBProvider
+from app.adapters.secondary.supabase_media_provider import SupabaseMediaProvider
 from app.use_cases.vibe_recommendation import VibeRecommendationUseCase
 from app.adapters.primary.api import router, get_use_case
 import os
@@ -9,7 +13,19 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Configure Loguru for structured JSON logging
+logger.remove()
+logger.add(sys.stderr, format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>")
+
 app = FastAPI(title="OmniLog Hexagonal API", version="1.0.0")
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception(f"Unhandled exception during request {request.method} {request.url}")
+    return JSONResponse(
+        status_code=500,
+        content={"message": "An unexpected server error occurred.", "details": str(exc)},
+    )
 
 # Setup CORS for the mobile app
 app.add_middleware(
@@ -22,10 +38,11 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup_event():
-    print("Booting up OmniLog AI Engine...")
+    logger.info("Booting up OmniLog AI Engine...")
     # 1. Initialize Secondary Adapters
     vector_engine = SentenceTransformerEngine('all-MiniLM-L6-v2')
-    media_provider = RealTMDBProvider(vector_engine)
+    tmdb_provider = RealTMDBProvider(vector_engine)
+    media_provider = SupabaseMediaProvider(vector_engine, tmdb_provider)
     
     # 2. Inject Adapters into the Use Case
     use_case = VibeRecommendationUseCase(

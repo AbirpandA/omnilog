@@ -41,7 +41,8 @@ class RealTMDBProvider(IMediaProvider):
         self.base_url = "https://api.themoviedb.org/3"
         self.image_base_url = "https://image.tmdb.org/t/p/w500"
         self.backdrop_base_url = "https://image.tmdb.org/t/p/w1280"
-        self.cache: Dict[str, CandidateMedia] = {}
+        from diskcache import Cache
+        self.cache = Cache("./tmdb_cache")
 
     def _get_vibe_tag(self, genre_ids: List[int], genres_data: List[dict]) -> str:
         if genres_data:
