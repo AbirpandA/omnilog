@@ -7,15 +7,22 @@ OmniLog is a privacy-first, highly personalized mobile application for catalogin
 The system is composed of two primary layers:
 
 ### 1. Mobile Client (React Native & Expo)
+
 - **Framework:** React Native managed via Expo.
-- **Persistence:** Local `expo-sqlite` (using the modern synchronous API). All user logs, ratings, and preferences are stored exclusively on the device.
-- **Styling:** Custom StyleSheet logic implementing a dark-mode glassmorphism design language using `expo-blur`. Third-party utility classes (e.g., Tailwind, NativeWind) are strictly prohibited.
+- **Offline High-Availability:** Integrates `@tanstack/react-query-persist-client` backed by `AsyncStorage` to cache all API responses. The app remains fully functional in offline mode, rendering the library and past recommendations from the local cache.
+- **Persistence (Local DB):** Local `expo-sqlite` (using the modern synchronous API). All user logs, ratings, and preferences are stored exclusively on the device to guarantee absolute privacy.
+- **Styling:** Custom StyleSheet logic implementing a dark-mode glassmorphism design language using `expo-blur`. Third-party utility classes (e.g., Tailwind) are strictly prohibited to ensure a premium, customized aesthetic.
 - **Iconography:** `lucide-react-native` is the sole standard for icons.
 
-### 2. Recommendation Microservice (FastAPI)
+### 2. Deep Catalog Backend (FastAPI + Supabase)
+
 - **Framework:** Python 3.12+ with FastAPI.
-- **State Management:** 100% Stateless. The service accepts an array of integer IDs representing the user's high-rated media, retrieves associated metadata from TMDB/OpenLibrary, and computes semantic similarities.
-- **Machine Learning Engine:** Utilizes `sentence-transformers/all-MiniLM-L6-v2` to convert plot, director, visual style, and emotional tone into 384-dimensional vectors. Recommendations are ranked via cosine similarity against the centroid vector of the user's seed items.
+- **Hybrid Data Retrieval (Decorator Pattern):** 
+  - **Live Fallback (`RealTMDBProvider`):** Direct connection to TMDB for fetching fresh releases ("Upcoming", "Trending Worldwide"). Integrated with `diskcache` to ensure microsecond latency.
+  - **Vector DB (`SupabaseMediaProvider`):** Acts as a decorator over TMDB. Uses Supabase with `pgvector` to store a massive, user-driven catalog of curated niche movies (Master Directors, obscure genres).
+- **Vibe Match Engine:** When a user requests recommendations, the backend retrieves the semantic metadata of their highly-rated movies, embeds them into a 384-dimensional vector via `all-MiniLM-L6-v2`, and queries the Supabase vector DB using cosine similarity (`match_movies` RPC).
+- **Autonomous Pollination:** Contains a background worker (`SyncMoviesUseCase`) and seeding scripts to continuously ingest new diverse movies into the Supabase Vector DB.
+- **Stateless Operations:** The backend stores zero user state. Privacy is enforced by requiring the client to send anonymous integer IDs for vector calculation.
 
 ## Database Schema (Local SQLite)
 
