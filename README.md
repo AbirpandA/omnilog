@@ -2,7 +2,55 @@
 
 OmniLog is a privacy-first, highly personalized mobile application for cataloging movies, television shows, and books. The system leverages a local-first architecture coupled with a stateless microservice to deliver intelligent, vector-based recommendations without compromising user privacy.
 
-## Architecture Overview
+## System Architecture
+
+```mermaid
+graph TD
+    %% Mobile Client Components
+    subgraph "Mobile Client (React Native + Expo)"
+        UI[UI Components]
+        LocalDB[(SQLite Local DB)]
+        Cache[(AsyncStorage Cache)]
+        Query[React Query Persist Client]
+        
+        UI <--> Query
+        Query <--> Cache
+        UI <--> LocalDB
+    end
+
+    %% Backend Service
+    subgraph "OmniLog API (FastAPI)"
+        API[API Router]
+        UseCase[Use Cases / Logic]
+        
+        subgraph "Hybrid Media Provider"
+            Deco[SupabaseMediaProvider (Decorator)]
+            TMDB[RealTMDBProvider]
+        end
+        
+        VectorEngine[SentenceTransformer\n(all-MiniLM-L6-v2)]
+        SyncTask[Background Sync Worker]
+        
+        API --> UseCase
+        UseCase --> Deco
+        Deco --> TMDB
+        Deco <--> VectorEngine
+        SyncTask --> TMDB
+        SyncTask --> Deco
+    end
+
+    %% External Systems
+    subgraph "External Providers"
+        Supabase[(Supabase pgvector)]
+        TMDB_API((TMDB API))
+    end
+
+    %% Flow Connections
+    Query <-->|Stateless HTTP Requests\n(IDs only)| API
+    Deco <-->|Semantic Search\n(match_movies RPC)| Supabase
+    TMDB <-->|REST API| TMDB_API
+    SyncTask -.->|Automated Pollination| Supabase
+```
 
 The system is composed of two primary layers:
 
