@@ -19,6 +19,7 @@ export function initDatabase() {
       id TEXT PRIMARY KEY NOT NULL,
       media_id TEXT NOT NULL,
       reaction TEXT NOT NULL,
+      notes TEXT,
       updated_at INTEGER NOT NULL,
       FOREIGN KEY (media_id) REFERENCES media_items(id)
     );
@@ -27,6 +28,13 @@ export function initDatabase() {
   // Quick migration in case the table exists without the description column
   try {
     db.execSync("ALTER TABLE media_items ADD COLUMN description TEXT;");
+  } catch (e) {
+    // Ignore error if column already exists
+  }
+
+  // Quick migration for notes column in user_reactions
+  try {
+    db.execSync("ALTER TABLE user_reactions ADD COLUMN notes TEXT;");
   } catch (e) {
     // Ignore error if column already exists
   }

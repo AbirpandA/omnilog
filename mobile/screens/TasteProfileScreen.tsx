@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { BarChart, User, Clapperboard, Flame, Hash, Sparkles } from 'lucide-react-native';
+import { BarChart, User, Clapperboard, Flame, Hash, Sparkles, BookOpen, Trophy, Award, Lock } from 'lucide-react-native';
 import { getAllLogs, LogEntry } from '../db/queries';
 import { fetchMediaDetails } from '../api';
 import { GlassCard } from '../components/GlassCard';
@@ -62,6 +62,11 @@ export function TasteProfileScreen({ navigation }: Props) {
     return "Cinephile";
   };
 
+  // Badge Logic
+  const hasFirstStep = logs.length >= 1;
+  const hasMasterCritic = logs.filter(l => l.reaction === 'Absolute cinema').length >= 5;
+  const hasJournalist = logs.filter(l => l.notes && l.notes.trim().length > 0).length >= 5;
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -105,16 +110,60 @@ export function TasteProfileScreen({ navigation }: Props) {
               <Text style={styles.personaDesc}>Based on the movies you rated highest.</Text>
             </GlassCard>
 
-            {/* UPCOMING JOURNAL ENTRY FEATURE (Placeholder) */}
-            <GlassCard style={styles.journalCard}>
+            {/* BADGES ROW */}
+            <View style={{ marginBottom: 24 }}>
               <View style={styles.personaHeader}>
-                <Hash color="#fff" size={20} />
-                <Text style={styles.personaTitle}>Cinematic Journal</Text>
+                <Trophy color="#fff" size={24} />
+                <Text style={[styles.personaTitle, { fontSize: 22 }]}>Achievements</Text>
               </View>
-              <Text style={styles.journalPlaceholder}>
-                (Coming Soon) Write rich text reviews and diary entries for your favorite films.
-              </Text>
-            </GlassCard>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ overflow: 'visible' }}>
+                
+                {/* Badge 1 */}
+                <View style={[styles.badgeContainer, !hasFirstStep && styles.badgeLocked]}>
+                  {hasFirstStep ? <Award color="#b829ea" size={32} /> : <Lock color="#666" size={24} />}
+                  <Text style={styles.badgeTitle}>First Step</Text>
+                  <Text style={styles.badgeDesc}>Log your 1st film</Text>
+                </View>
+
+                {/* Badge 2 */}
+                <View style={[styles.badgeContainer, !hasMasterCritic && styles.badgeLocked]}>
+                  {hasMasterCritic ? <Award color="#00C851" size={32} /> : <Lock color="#666" size={24} />}
+                  <Text style={styles.badgeTitle}>Master Critic</Text>
+                  <Text style={styles.badgeDesc}>5 Absolute Cinemas</Text>
+                </View>
+
+                {/* Badge 3 */}
+                <View style={[styles.badgeContainer, !hasJournalist && styles.badgeLocked]}>
+                  {hasJournalist ? <Award color="#ffbb33" size={32} /> : <Lock color="#666" size={24} />}
+                  <Text style={styles.badgeTitle}>Journalist</Text>
+                  <Text style={styles.badgeDesc}>5 Journal Entries</Text>
+                </View>
+
+              </ScrollView>
+            </View>
+
+            {/* CINEMATIC JOURNAL FEED */}
+            <View style={{ marginTop: 16 }}>
+              <View style={styles.personaHeader}>
+                <BookOpen color="#fff" size={24} />
+                <Text style={[styles.personaTitle, { fontSize: 22 }]}>Cinematic Journal</Text>
+              </View>
+              {logs.filter(l => l.notes && l.notes.trim().length > 0).length > 0 ? (
+                logs.filter(l => l.notes && l.notes.trim().length > 0).map(log => (
+                  <GlassCard key={log.reactionId} style={styles.journalEntryCard}>
+                    <Text style={styles.journalMovieTitle}>{log.title}</Text>
+                    <Text style={styles.journalDate}>{new Date(log.updated_at).toLocaleDateString()}</Text>
+                    <Text style={styles.journalNotes}>{log.notes}</Text>
+                  </GlassCard>
+                ))
+              ) : (
+                <GlassCard style={styles.journalCard}>
+                  <Text style={styles.journalPlaceholder}>
+                    You haven't written any journal entries yet. Go to a movie details screen and add your thoughts!
+                  </Text>
+                </GlassCard>
+              )}
+            </View>
           </>
         ) : (
           <View style={styles.emptyContainer}>
@@ -147,9 +196,30 @@ const styles = StyleSheet.create({
   personaTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginLeft: 8 },
   personaValue: { fontSize: 28, fontWeight: '800', color: '#00C851', marginBottom: 8 },
   personaDesc: { color: '#888', fontSize: 14 },
+
+  badgeContainer: { 
+    width: 120, 
+    height: 120, 
+    marginRight: 16, 
+    backgroundColor: 'rgba(255,255,255,0.05)', 
+    borderRadius: 20, 
+    borderWidth: 1, 
+    borderColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12
+  },
+  badgeLocked: { opacity: 0.5, borderColor: '#333' },
+  badgeTitle: { color: '#fff', fontSize: 14, fontWeight: 'bold', marginTop: 12, textAlign: 'center' },
+  badgeDesc: { color: '#888', fontSize: 10, marginTop: 4, textAlign: 'center' },
   
   journalCard: { padding: 24, borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' },
-  journalPlaceholder: { color: '#aaa', fontSize: 14, fontStyle: 'italic', lineHeight: 22 },
+  journalPlaceholder: { color: '#aaa', fontSize: 14, fontStyle: 'italic', lineHeight: 22, textAlign: 'center' },
+  
+  journalEntryCard: { padding: 20, borderRadius: 20, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' },
+  journalMovieTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
+  journalDate: { color: '#888', fontSize: 12, marginBottom: 12 },
+  journalNotes: { color: '#ddd', fontSize: 15, lineHeight: 22 },
   
   emptyContainer: { marginTop: 60, alignItems: 'center' },
   emptyText: { color: '#888', fontSize: 16, textAlign: 'center' }

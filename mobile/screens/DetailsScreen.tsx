@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ChevronLeft, Star, Heart, ThumbsDown, ThumbsUp, Medal, Sparkles, X, Bookmark, FolderHeart, Plus } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
+import { Image } from 'expo-image';
 import { fetchMediaDetails, fetchSimilarMovies, RecommendResponse, MediaDetailsResponse } from '../api';
 import { insertLog, getLogByMediaId, deleteLog, LogEntry } from '../db/queries';
 import { FlashList } from '@shopify/flash-list';
@@ -29,9 +30,14 @@ export function DetailsScreen({ route, navigation }: Props) {
   
   const [localLog, setLocalLog] = useState<LogEntry | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [journalNotes, setJournalNotes] = useState('');
 
   useEffect(() => {
-    setLocalLog(getLogByMediaId(media_id));
+    const log = getLogByMediaId(media_id);
+    setLocalLog(log);
+    if (log && log.notes) {
+      setJournalNotes(log.notes);
+    }
   }, [media_id]);
 
   const { data: details, isLoading: loadingDetails } = useQuery({
@@ -51,8 +57,13 @@ export function DetailsScreen({ route, navigation }: Props) {
       type: 'movie',
       posterUri: poster_url,
       description: description
-    }, reaction);
-    setLocalLog(getLogByMediaId(media_id));
+    }, reaction, journalNotes);
+    
+    const updatedLog = getLogByMediaId(media_id);
+    setLocalLog(updatedLog);
+    if (updatedLog && updatedLog.notes) {
+      setJournalNotes(updatedLog.notes);
+    }
     setModalVisible(false);
   };
 
@@ -96,7 +107,7 @@ export function DetailsScreen({ route, navigation }: Props) {
     >
       <View style={styles.posterWrapper}>
         {item.poster_url ? (
-          <Image source={{ uri: item.poster_url }} style={styles.horizontalPoster} />
+          <Image source={{ uri: item.poster_url }} style={styles.horizontalPoster} transition={200} contentFit="cover" />
         ) : (
           <View style={[styles.horizontalPoster, styles.placeholderPoster]}>
             <Text style={styles.placeholderText}>No Image</Text>
@@ -117,7 +128,8 @@ export function DetailsScreen({ route, navigation }: Props) {
             <Image 
               source={{ uri: details?.backdrop_url || poster_url }} 
               style={styles.heroImage} 
-              resizeMode="cover"
+              contentFit="cover"
+              transition={300}
             />
           )}
           <View style={styles.heroGradient} />
@@ -135,7 +147,7 @@ export function DetailsScreen({ route, navigation }: Props) {
           <View style={styles.posterAndTitleRow}>
             <View style={styles.posterWrapper}>
               {poster_url ? (
-                <Image source={{ uri: poster_url }} style={styles.overlayPoster} />
+                <Image source={{ uri: poster_url }} style={styles.overlayPoster} transition={200} contentFit="cover" />
               ) : (
                 <View style={[styles.overlayPoster, styles.placeholderPoster]}>
                   <Text style={styles.placeholderText}>No Poster</Text>
@@ -291,6 +303,27 @@ export function DetailsScreen({ route, navigation }: Props) {
                 </TouchableOpacity>
               ))}
             </View>
+
+            <View style={{ marginTop: 24 }}>
+              <Text style={styles.modalSubHeader}>Cinematic Journal</Text>
+              <TextInput
+                style={styles.journalInput}
+                placeholder="Write your thoughts, feelings, and vibes about this movie..."
+                placeholderTextColor="#666"
+                multiline
+                numberOfLines={4}
+                value={journalNotes}
+                onChangeText={setJournalNotes}
+              />
+              {localLog?.reaction && (
+                <TouchableOpacity 
+                  style={styles.saveNotesButton}
+                  onPress={() => handleRate(localLog.reaction)}
+                >
+                  <Text style={styles.saveNotesText}>Save Notes</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </BlurView>
       </Modal>
@@ -355,5 +388,30 @@ const styles = StyleSheet.create({
   
   reactionGrid: { gap: 12 },
   rateButton: { flexDirection: 'row', padding: 18, borderRadius: 20, borderWidth: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1a1a1a' },
-  rateText: { fontSize: 16, fontWeight: 'bold' }
+  rateText: { fontSize: 16, fontWeight: 'bold' },
+  
+  journalInput: {
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: 16,
+    color: '#fff',
+    padding: 16,
+    minHeight: 120,
+    textAlignVertical: 'top',
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  saveNotesButton: {
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 20,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  saveNotesText: {
+    color: '#000',
+    fontWeight: 'bold',
+    fontSize: 16,
+  }
 });

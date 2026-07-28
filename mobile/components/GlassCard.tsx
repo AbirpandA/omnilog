@@ -1,5 +1,5 @@
-import React, { ReactNode } from 'react';
-import { StyleSheet, View, ViewStyle, StyleProp } from 'react-native';
+import React, { ReactNode, useEffect, useRef } from 'react';
+import { StyleSheet, ViewStyle, StyleProp, Animated } from 'react-native';
 import { BlurView } from 'expo-blur';
 
 interface GlassCardProps {
@@ -8,12 +8,36 @@ interface GlassCardProps {
 }
 
 export function GlassCard({ children, style }: GlassCardProps) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 400,
+        useNativeDriver: true,
+      })
+    ]).start();
+  }, [fadeAnim, slideAnim]);
+
   return (
-    <View style={[styles.container, style]}>
+    <Animated.View 
+      style={[
+        styles.container, 
+        style, 
+        { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
+      ]}
+    >
       <BlurView tint="dark" intensity={40} style={styles.blurView}>
         {children}
       </BlurView>
-    </View>
+    </Animated.View>
   );
 }
 

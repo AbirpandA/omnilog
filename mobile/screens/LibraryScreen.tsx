@@ -1,19 +1,34 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Image, FlatList, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Animated, TextInput, ScrollView } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { BookMarked, Play } from 'lucide-react-native';
+import { BookMarked, Play, Search, ArrowDownAZ, CalendarHeart } from 'lucide-react-native';
+import { Image } from 'expo-image';
 import { getAllLogs, LogEntry } from '../db/queries';
 import { GlassCard } from '../components/GlassCard';
 import { ReactionConfig, ReactionType } from '../utils/constants';
 
 type Props = any;
-type FilterType = 'all' | 'watchlist' | 'collection';
+type FilterType = 'all' | ReactionType;
+type SortOrder = 'newest' | 'alphabetical';
+
+const ALL_FILTERS: { label: string; value: FilterType }[] = [
+  { label: 'All Logs', value: 'all' },
+  { label: 'Absolute Cinema', value: 'Absolute cinema' },
+  { label: 'Pure Gold', value: 'pure gold' },
+  { label: 'Okay', value: 'okay' },
+  { label: 'Lame', value: 'lame' },
+  { label: 'Watchlist', value: 'watchlist' },
+  { label: 'Collection', value: 'collection' }
+];
 
 export function LibraryScreen({ navigation }: Props) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  
+  const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<FilterType>('all');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
   
   const scrollY = new Animated.Value(0);
 
@@ -25,14 +40,32 @@ export function LibraryScreen({ navigation }: Props) {
     }, [])
   );
 
-  const filteredLogs = logs.filter(log => {
-    if (filter === 'watchlist') return log.reaction === 'watchlist';
-    if (filter === 'collection') return log.reaction === 'collection';
-    return true; // all
+  let filteredLogs = logs.filter(log => {
+    // 1. Apply Filter
+    if (filter !== 'all' && log.reaction !== filter) return false;
+    
+    // 2. Apply Search Query
+    if (searchQuery.trim() !== '') {
+      const query = searchQuery.toLowerCase();
+      if (!log.title.toLowerCase().includes(query)) {
+        return false;
+      }
+    }
+    
+    return true;
+  });
+
+  // 3. Apply Sorting
+  filteredLogs.sort((a, b) => {
+    if (sortOrder === 'alphabetical') {
+      return a.title.localeCompare(b.title);
+    } else {
+      // newest first
+      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+    }
   });
 
   const renderItem = ({ item }: { item: LogEntry }) => {
-    // Need to cast reaction to ReactionType to keep typescript happy here since it's stored as string
     const config = ReactionConfig[item.reaction as ReactionType] || ReactionConfig['okay'];
     const IconComponent = config.icon;
 
@@ -49,7 +82,12 @@ export function LibraryScreen({ navigation }: Props) {
         <GlassCard style={styles.cardContainer}>
           <View style={styles.cardContent}>
             {item.posterUri ? (
-              <Image source={{ uri: item.posterUri }} style={styles.poster} />
+              <Image 
+                source={{ uri: item.posterUri }} 
+                style={styles.poster}
+                contentFit="cover"
+                transition={200}
+              />
             ) : (
               <View style={[styles.poster, styles.placeholderPoster]}>
                 <BookMarked color="#666" size={24} />
@@ -85,36 +123,69 @@ export function LibraryScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <Animated.View style={[styles.header, { transform: [{ translateY: headerTranslateY }] }]}>
-        <BookMarked color="#ffffff" size={32} />
-        <Text style={styles.headerTitle}>Library</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <BookMarked color="#ffffff" size={32} />
+          <Text style={styles.headerTitle}>Library</Text>
+        </View>
       </Animated.View>
 
-      <View style={styles.filterRow}>
-        <TouchableOpacity 
-          style={[styles.filterChip, filter === 'all' && styles.filterChipActive]}
-          onPress={() => setFilter('all')}
+      <View style={styles.controlsContainer}>
+        {/* Search Bar */}
+        <View style={styles.searchRow}>
+          <View style={styles.searchContainer}>
+            <Search color="#888" size={20} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search movies..."
+              placeholderTextColor="#888"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              selectionColor="#b829ea"
+            />
+          </View>
+          
+          <TouchableOpacity 
+            style={styles.sortButton}
+            onPress={() => setSortOrder(prev => prev === 'newest' ? 'alphabetical' : 'newest')}
+          >
+            {sortOrder === 'newest' ? (
+              <CalendarHeart color={sortOrder === 'newest' ? '#b829ea' : '#fff'} size={24} />
+            ) : (
+              <ArrowDownAZ color={sortOrder === 'alphabetical' ? '#b829ea' : '#fff'} size={24} />
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Filter Chips */}
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterScroll}
+          contentContainerStyle={styles.filterRow}
         >
-          <Text style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>All Logs</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.filterChip, filter === 'watchlist' && styles.filterChipActive]}
-          onPress={() => setFilter('watchlist')}
-        >
-          <Text style={[styles.filterText, filter === 'watchlist' && styles.filterTextActive]}>Watchlist</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.filterChip, filter === 'collection' && styles.filterChipActive]}
-          onPress={() => setFilter('collection')}
-        >
-          <Text style={[styles.filterText, filter === 'collection' && styles.filterTextActive]}>Collection</Text>
-        </TouchableOpacity>
+          {ALL_FILTERS.map((f) => (
+            <TouchableOpacity 
+              key={f.value}
+              style={[styles.filterChip, filter === f.value && styles.filterChipActive]}
+              onPress={() => setFilter(f.value)}
+            >
+              <Text style={[styles.filterText, filter === f.value && styles.filterTextActive]}>
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
       {filteredLogs.length === 0 && !loading ? (
         <View style={styles.emptyState}>
           <Play color="#333" size={64} style={{ marginBottom: 16 }} />
-          <Text style={styles.emptyTitle}>Nothing here yet</Text>
-          <Text style={styles.emptySubtitle}>Start exploring and logging movies to build your library.</Text>
+          <Text style={styles.emptyTitle}>Nothing here</Text>
+          <Text style={styles.emptySubtitle}>
+            {logs.length === 0 
+              ? "Start exploring and logging movies to build your library."
+              : "No movies match your current search and filter."}
+          </Text>
         </View>
       ) : (
         <Animated.FlatList
@@ -138,6 +209,7 @@ const styles = StyleSheet.create({
   header: { 
     flexDirection: 'row', 
     alignItems: 'center', 
+    justifyContent: 'space-between',
     paddingHorizontal: 24, 
     paddingTop: 60, 
     paddingBottom: 16,
@@ -146,11 +218,54 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 32, fontWeight: 'bold', color: '#ffffff', marginLeft: 12, letterSpacing: -1 },
   
+  controlsContainer: {
+    paddingHorizontal: 24,
+    marginBottom: 8,
+    zIndex: 5,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  searchContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 48,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)'
+  },
+  searchIcon: { marginRight: 8 },
+  searchInput: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 16,
+    height: '100%',
+  },
+  sortButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)'
+  },
+  
+  filterScroll: {
+    flexGrow: 0,
+    marginBottom: 8,
+  },
   filterRow: {
     flexDirection: 'row',
-    paddingHorizontal: 24,
-    marginBottom: 16,
-    gap: 8
+    gap: 8,
+    paddingRight: 24
   },
   filterChip: {
     paddingHorizontal: 16,

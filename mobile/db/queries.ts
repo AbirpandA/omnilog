@@ -23,6 +23,7 @@ export interface LogEntry {
   posterUri?: string;
   releaseYear?: string;
   description?: string;
+  notes?: string;
 }
 
 // Helper to generate a unique ID
@@ -30,7 +31,7 @@ function uuid(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
-export function insertLog(media: MediaItem, reaction: ReactionType): void {
+export function insertLog(media: MediaItem, reaction: ReactionType, notes?: string): void {
   // Use a transaction to ensure both inserts succeed together
   db.withTransactionSync(() => {
     // 1. Insert or Replace Media Item (in case they rate something again)
@@ -57,11 +58,19 @@ export function insertLog(media: MediaItem, reaction: ReactionType): void {
     const timestamp = Date.now();
     
     db.runSync(
-      `INSERT INTO user_reactions (id, media_id, reaction, updated_at) 
-       VALUES (?, ?, ?, ?)`,
-      [reactionId, media.id, reaction, timestamp]
+      `INSERT INTO user_reactions (id, media_id, reaction, notes, updated_at) 
+       VALUES (?, ?, ?, ?, ?)`,
+      [reactionId, media.id, reaction, notes || null, timestamp]
     );
   });
+}
+
+export function updateLogNotes(mediaId: string, notes: string): void {
+  const timestamp = Date.now();
+  db.runSync(
+    `UPDATE user_reactions SET notes = ?, updated_at = ? WHERE media_id = ?`,
+    [notes, timestamp, mediaId]
+  );
 }
 
 export function getAllLogs(): LogEntry[] {
@@ -70,6 +79,7 @@ export function getAllLogs(): LogEntry[] {
     `SELECT 
         ur.id as reactionId, 
         ur.reaction, 
+        ur.notes,
         ur.updated_at,
         mi.id as mediaId, 
         mi.title, 
@@ -90,6 +100,7 @@ export function getLogByMediaId(mediaId: string): LogEntry | null {
     `SELECT 
         ur.id as reactionId, 
         ur.reaction, 
+        ur.notes,
         ur.updated_at,
         mi.id as mediaId, 
         mi.title, 

@@ -1,12 +1,17 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, TouchableOpacity } from 'react-native';
+import { ErrorBoundary } from 'react-error-boundary';
+import { logger } from './utils/logger';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { BookMarked, Compass, User } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { initDatabase } from './db/index';
 import { LibraryScreen } from './screens/LibraryScreen';
@@ -17,7 +22,17 @@ import { TasteProfileScreen } from './screens/TasteProfileScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator<RootStackParamList>();
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 1000 * 60 * 60 * 24 * 7, // 7 days
+    },
+  },
+});
+
+const asyncStoragePersister = createAsyncStoragePersister({
+  storage: AsyncStorage,
+});
 
 function HomeTabs() {
   return (
@@ -68,10 +83,21 @@ export default function App() {
     try {
       initDatabase();
       setDbInitialized(true);
+      logger.info("Database initialized successfully.");
     } catch (e) {
-      console.error("Database init failed:", e);
+      logger.error("Database init failed:", e);
     }
   }, []);
+
+  const FallbackComponent = ({ error, resetErrorBoundary }: any) => (
+    <View style={styles.errorContainer}>
+      <Text style={styles.errorTitle}>Something went wrong!</Text>
+      <Text style={styles.errorText}>{error.message}</Text>
+      <TouchableOpacity style={styles.resetButton} onPress={resetErrorBoundary}>
+        <Text style={styles.resetButtonText}>Restart App</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   if (!dbInitialized) {
     return (
@@ -82,7 +108,8 @@ export default function App() {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <ErrorBoundary FallbackComponent={FallbackComponent} onReset={() => setDbInitialized(false)}>
+      <PersistQueryClientProvider client={queryClient} persistOptions={{ persister: asyncStoragePersister }}>
       <NavigationContainer theme={DarkTheme}>
         <StatusBar style="light" />
         <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -91,7 +118,8 @@ export default function App() {
           <Stack.Screen name="ExpandedSuggestions" component={ExpandedSuggestionsScreen as any} />
         </Stack.Navigator>
       </NavigationContainer>
-    </QueryClientProvider>
+    </PersistQueryClientProvider>
+    </ErrorBoundary>
   );
 }
 
@@ -105,5 +133,34 @@ const styles = StyleSheet.create({
   loadingText: {
     color: '#ffffff',
     fontSize: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    backgroundColor: '#050505',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  errorTitle: {
+    color: '#ff4444',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  errorText: {
+    color: '#aaa',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  resetButton: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 20,
+  },
+  resetButtonText: {
+    color: '#000000',
+    fontWeight: 'bold',
   }
 });
