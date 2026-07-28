@@ -1,88 +1,124 @@
 # OmniLog
 
-OmniLog is a privacy-first, highly personalized mobile application for cataloging movies, television shows, and books. The system leverages a local-first architecture coupled with a stateless microservice to deliver intelligent, vector-based recommendations without compromising user privacy.
+OmniLog is a privacy-first, highly personalized mobile application for cataloging media (movies, television shows, and books). The system leverages a local-first architecture coupled with a stateless microservice to deliver intelligent, vector-based recommendations without compromising user privacy. All user state is strictly maintained on-device, with the backend functioning purely as a semantic computation engine.
+
+## Feature Matrix
+
+| Feature | Description | Architecture Benefit |
+| :--- | :--- | :--- |
+| **Local-First Storage** | All user logs, ratings, and preferences are stored exclusively on the device using SQLite. | Guarantees absolute data privacy and zero cloud lock-in. |
+| **Offline High-Availability** | Integrates `@tanstack/react-query-persist-client` with `AsyncStorage` to cache API responses. | App remains fully functional in offline mode, serving cached recommendations. |
+| **Hybrid Vector Recommendations** | Vibe Match Engine embeds highly-rated movies into a 384-dimensional vector space using `all-MiniLM-L6-v2`. | Enables deep semantic similarity search without tracking user profiles. |
+| **Stateless Microservice** | The FastAPI backend retains zero session data; it only computes vectors from anonymized integer IDs. | Enforces privacy by design; backend is highly scalable and disposable. |
+| **Autonomous Data Pollination** | Background worker (`SyncMoviesUseCase`) continuously ingests niche catalog data into the vector DB. | Ensures recommendations are diverse and discoverable without manual data entry. |
 
 ## System Architecture
 
+The architecture is divided into a local-first mobile client and a stateless recommendation microservice.
+
+### 1. High-Level Data Flow
+
 ```mermaid
-graph TD
-    %% Mobile Client Components
-    subgraph "Mobile Client (React Native + Expo)"
-        UI[UI Components]
-        LocalDB[(SQLite Local DB)]
-        Cache[(AsyncStorage Cache)]
-        Query[React Query Persist Client]
-        
-        UI <--> Query
-        Query <--> Cache
-        UI <--> LocalDB
+flowchart LR
+    %% High Level Architecture
+    subgraph Client ["📱 Client Layer (Local-First)"]
+        direction TB
+        App("App UI")
+        Local[("SQLite DB")]
+        App <-->|"Reads/Writes"| Local
     end
 
-    %% Backend Service
-    subgraph "OmniLog API (FastAPI)"
-        API[API Router]
-        UseCase[Use Cases / Logic]
-        
-        subgraph "Hybrid Media Provider"
-            Deco[SupabaseMediaProvider (Decorator)]
-            TMDB[RealTMDBProvider]
-        end
-        
-        VectorEngine[SentenceTransformer\n(all-MiniLM-L6-v2)]
-        SyncTask[Background Sync Worker]
-        
-        API --> UseCase
-        UseCase --> Deco
-        Deco --> TMDB
-        Deco <--> VectorEngine
-        SyncTask --> TMDB
-        SyncTask --> Deco
+    subgraph Backend ["⚙️ API Layer (Stateless)"]
+        direction TB
+        API("FastAPI Service")
+        Worker("Background Worker")
     end
 
-    %% External Systems
-    subgraph "External Providers"
-        Supabase[(Supabase pgvector)]
-        TMDB_API((TMDB API))
+    subgraph Data ["🌍 Data Layer"]
+        direction TB
+        Supabase[("Supabase<br>(pgvector)")]
+        TMDB(("TMDB API"))
     end
 
-    %% Flow Connections
-    Query <-->|Stateless HTTP Requests\n(IDs only)| API
-    Deco <-->|Semantic Search\n(match_movies RPC)| Supabase
-    TMDB <-->|REST API| TMDB_API
-    SyncTask -.->|Automated Pollination| Supabase
+    App ===>|"HTTP Requests<br>(Anonymized IDs)"| API
+    API <-->|"Vector Search"| Supabase
+    API <-->|"Live Data"| TMDB
+    Worker -.->|"Pollinate"| Supabase
+    Worker -.->|"Fetch"| TMDB
+
+    classDef mobile fill:#0f172a,stroke:#3b82f6,stroke-width:2px,color:#fff;
+    classDef api fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#fff;
+    classDef db fill:#2e1065,stroke:#8b5cf6,stroke-width:2px,color:#fff;
+    
+    class App,Local mobile;
+    class API,Worker api;
+    class Supabase,TMDB db;
 ```
 
-The system is composed of two primary layers:
+### 2. Vibe Match Recommendation Engine
 
-### 1. Mobile Client (React Native & Expo)
+At the core of the backend is the `HybridMediaProvider`, which implements the Decorator pattern to seamlessly blend live TMDB data with our custom Vector database.
 
+```mermaid
+flowchart LR
+    Request(["User History<br>(Anonymized IDs)"])
+    
+    subgraph Backend ["⚙️ Recommendation Engine (FastAPI)"]
+        direction TB
+        Provider{"Hybrid Provider<br>(Decorator)"}
+        Model("Vector Model<br>(all-MiniLM-L6-v2)")
+        Fallback("TMDB API<br>(Live Data)")
+        
+        Provider <-->|"1. Embeds History"| Model
+        Provider -.->|"3. Fallback (if missing)"| Fallback
+    end
+    
+    Supabase[("Supabase DB<br>(pgvector)")]
+    
+    Request ===>|"Requests Recs"| Provider
+    Provider <-->|"2. Cosine Similarity<br>(match_movies RPC)"| Supabase
+
+    classDef input fill:#334155,stroke:#94a3b8,stroke-width:2px,color:#fff;
+    classDef engine fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#fff;
+    classDef db fill:#2e1065,stroke:#8b5cf6,stroke-width:2px,color:#fff;
+    
+    class Request input;
+    class Provider,Model,Fallback engine;
+    class Supabase db;
+```
+
+## Technical Layers Breakdown
+
+### Mobile Client (React Native & Expo)
 - **Framework:** React Native managed via Expo.
-- **Offline High-Availability:** Integrates `@tanstack/react-query-persist-client` backed by `AsyncStorage` to cache all API responses. The app remains fully functional in offline mode, rendering the library and past recommendations from the local cache.
-- **Persistence (Local DB):** Local `expo-sqlite` (using the modern synchronous API). All user logs, ratings, and preferences are stored exclusively on the device to guarantee absolute privacy.
-- **Styling:** Custom StyleSheet logic implementing a dark-mode glassmorphism design language using `expo-blur`. Third-party utility classes (e.g., Tailwind) are strictly prohibited to ensure a premium, customized aesthetic.
-- **Iconography:** `lucide-react-native` is the sole standard for icons.
+- **Persistence:** Local `expo-sqlite` (modern synchronous API) for core relational data, supplemented by `AsyncStorage` for query caching.
+- **Network & State:** `@tanstack/react-query-persist-client` handles server-state synchronization and offline caching mechanics.
+- **Styling:** Custom StyleSheet logic implementing a dark-mode glassmorphism design language using `expo-blur`. Third-party utility classes (e.g., Tailwind) are strictly prohibited to enforce a unified design system.
+- **Iconography:** `lucide-react-native`.
 
-### 2. Deep Catalog Backend (FastAPI + Supabase)
-
+### Deep Catalog Backend (FastAPI + Supabase)
 - **Framework:** Python 3.12+ with FastAPI.
 - **Hybrid Data Retrieval (Decorator Pattern):** 
-  - **Live Fallback (`RealTMDBProvider`):** Direct connection to TMDB for fetching fresh releases ("Upcoming", "Trending Worldwide"). Integrated with `diskcache` to ensure microsecond latency.
-  - **Vector DB (`SupabaseMediaProvider`):** Acts as a decorator over TMDB. Uses Supabase with `pgvector` to store a massive, user-driven catalog of curated niche movies (Master Directors, obscure genres).
-- **Vibe Match Engine:** When a user requests recommendations, the backend retrieves the semantic metadata of their highly-rated movies, embeds them into a 384-dimensional vector via `all-MiniLM-L6-v2`, and queries the Supabase vector DB using cosine similarity (`match_movies` RPC).
-- **Autonomous Pollination:** Contains a background worker (`SyncMoviesUseCase`) and seeding scripts to continuously ingest new diverse movies into the Supabase Vector DB.
-- **Stateless Operations:** The backend stores zero user state. Privacy is enforced by requiring the client to send anonymous integer IDs for vector calculation.
+  - **Live Fallback (`RealTMDBProvider`):** Direct TMDB connection for fetching high-volatility data (upcoming releases). Cached via `diskcache` for microsecond latency.
+  - **Vector DB (`SupabaseMediaProvider`):** Decorator wrapping the TMDB provider. Utilizes Supabase `pgvector` for scalable cosine similarity searches against embedded metadata.
+- **Embedding Engine:** Implements `SentenceTransformer` with the `all-MiniLM-L6-v2` model to map textual metadata into 384-dimensional vector space.
 
-## Database Schema (Local SQLite)
+## Data/Schema Design
 
-The local persistence layer stores two main entities:
-- **MediaItems:** Core metadata (ID, title, type, poster URI, release year, runtime, and directors/authors).
-- **UserReactions:** A specialized 4-tier rating system mapped to numeric weights:
-  - `lame` (-2.0)
-  - `okay` (0.0)
-  - `freaking` (1.0)
-  - `Absolute cinema` (2.0)
+### Local Persistence Layer (SQLite)
 
-## Getting Started
+| Entity | Primary Attributes | Purpose |
+| :--- | :--- | :--- |
+| **MediaItems** | ID, Title, Type, Poster URI, Release Year, Runtime, Directors/Authors | Core metadata caching for instant offline rendering. |
+| **UserReactions** | Media ID, Rating Weight | A 4-tier rating system mapped to numeric weights: `lame` (-2.0), `okay` (0.0), `freaking` (1.0), `Absolute cinema` (2.0). Used as the input vector for recommendations. |
+
+### Remote Vector Layer (Supabase pgvector)
+
+| Entity | Core Schema | Purpose |
+| :--- | :--- | :--- |
+| **Movies/Media** | ID, Metadata Text, `embedding` (vector(384)) | Stores the semantic representation of media for `match_movies` RPC cosine similarity calculations. |
+
+## Local Setup & Development
 
 ### Prerequisites
 - Node.js (v18+)
@@ -90,19 +126,24 @@ The local persistence layer stores two main entities:
 - Expo CLI
 - iOS Simulator or Android Emulator
 
-### Mobile Setup
-1. Navigate to the mobile directory.
-2. Install dependencies via `npm install`.
-3. Start the Metro bundler using `npx expo start`.
+### Mobile Client Environment
+```bash
+cd mobile
+npm install
+npx expo start
+```
 
-### Backend Setup
-1. Navigate to the backend directory.
-2. Create and activate a virtual environment.
-3. Install dependencies via `pip install -r requirements.txt`.
-4. Start the FastAPI server using `uvicorn main:app --reload`.
+### Backend Microservice Environment
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
 
 ## Development Principles
 
-- **No Cloud Storage:** User data must never leave the device except as anonymous integer arrays during recommendation requests.
-- **Strict Theming:** The application supports dark mode exclusively.
-- **Stateless Operations:** The backend must rely entirely on the payload parameters and internal caches, avoiding any session or user-level persistence.
+1. **No Cloud Storage:** User state and behavioral data must never leave the device. Network payloads are restricted to anonymous integer arrays representing entity IDs.
+2. **Stateless Operations:** The backend must rely entirely on payload parameters and internal ephemeral caches. No session state or user-level persistence is permitted.
+3. **Strict Theming:** The application architecture supports dark mode exclusively, mandating a premium, highly-customized aesthetic without reliance on utility CSS frameworks.
