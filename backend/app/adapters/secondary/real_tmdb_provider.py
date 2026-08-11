@@ -1,7 +1,8 @@
 import os
 import random
 import datetime
-import requests
+import httpx
+import asyncio
 from typing import List, Dict, Optional
 from app.domain.models import CandidateMedia, Vector
 from app.ports.secondary.media_provider import IMediaProvider
@@ -42,6 +43,7 @@ class RealTMDBProvider(IMediaProvider):
         self.image_base_url = "https://image.tmdb.org/t/p/w500"
         self.backdrop_base_url = "https://image.tmdb.org/t/p/w1280"
         from diskcache import Cache
+
         self.cache = Cache("./tmdb_cache")
 
     def _get_vibe_tag(self, genre_ids: List[int], genres_data: List[dict]) -> str:
@@ -75,27 +77,31 @@ class RealTMDBProvider(IMediaProvider):
             return noun
         return "Unknown Vibe"
 
-    def _safe_get(self, url: str):
+    async def _safe_get(self, url: str):
         try:
-            return requests.get(url, headers=self.headers, timeout=5)
-        except requests.exceptions.RequestException as e:
+            async with httpx.AsyncClient() as client:
+                return await client.get(url, headers=self.headers, timeout=5.0)
+        except httpx.RequestError as e:
             print(f"TMDB Network Error: {e}")
 
             class DummyResponse:
                 status_code = 500
 
+                def json(self):
+                    return {}
+
             return DummyResponse()
 
-    def _fetch_movie(self, movie_id: str) -> dict:
+    async def _fetch_movie(self, movie_id: str) -> dict:
         url = f"{self.base_url}/movie/{movie_id}?language=en-US"
-        response = self._safe_get(url)
+        response = await self._safe_get(url)
         if response.status_code == 200:
             return response.json()
         return {}
 
-    def get_movie_details(self, movie_id: str) -> Optional[dict]:
+    async def get_movie_details(self, movie_id: str) -> Optional[dict]:
         url = f"{self.base_url}/movie/{movie_id}?language=en-US&append_to_response=credits"
-        response = self._safe_get(url)
+        response = await self._safe_get(url)
         if response.status_code == 200:
             data = response.json()
 
@@ -134,7 +140,7 @@ class RealTMDBProvider(IMediaProvider):
             }
         return None
 
-    def _create_candidate(self, tmdb_data: dict) -> CandidateMedia:
+    async def _create_candidate(self, tmdb_data: dict) -> CandidateMedia:
         movie_id = str(tmdb_data.get("id"))
         if movie_id in self.cache:
             return self.cache[movie_id]
@@ -152,7 +158,7 @@ class RealTMDBProvider(IMediaProvider):
         vibe_tag = self._get_vibe_tag([], tmdb_data.get("genres", []))
 
         rich_description = f"{overview} Genres: {genres}"
-        vec = self.vector_engine.encode_text(rich_description)
+        vec = await asyncio.to_thread(self.vector_engine.encode_text, rich_description)
 
         candidate = CandidateMedia(
             id=movie_id,
@@ -165,18 +171,18 @@ class RealTMDBProvider(IMediaProvider):
         self.cache[movie_id] = candidate
         return candidate
 
-    def get_media_by_ids(self, ids: List[str]) -> List[CandidateMedia]:
+    async def get_media_by_ids(self, ids: List[str]) -> List[CandidateMedia]:
         results = []
         for mid in ids:
             if mid in self.cache:
                 results.append(self.cache[mid])
             else:
-                data = self._fetch_movie(mid)
+                data = await self._fetch_movie(mid)
                 if data and "id" in data:
-                    results.append(self._create_candidate(data))
+                    results.append(await self._create_candidate(data))
         return results
 
-    def _process_results(
+    async def _process_results(
         self,
         results: List[dict],
         exclude_ids: List[str],
@@ -210,7 +216,7 @@ class RealTMDBProvider(IMediaProvider):
 
                 vibe_tag = self._get_vibe_tag(r.get("genre_ids", []), [])
 
-                vec = self.vector_engine.encode_text(overview)
+                vec = await asyncio.to_thread(self.vector_engine.encode_text, overview)
                 candidate = CandidateMedia(
                     id=mid,
                     title=title,
@@ -226,12 +232,12 @@ class RealTMDBProvider(IMediaProvider):
                 break
         return candidates
 
-    def get_candidates_for_vibe(
+    async def get_candidates_for_vibe(
         self, seed_movies: List[CandidateMedia], exclude_ids: List[str], limit: int = 50
     ) -> List[CandidateMedia]:
         genre_ids = []
         for seed in seed_movies:
-            data = self._fetch_movie(seed.id)
+            data = await self._fetch_movie(seed.id)
             if data and "genres" in data:
                 genre_ids.extend([str(g["id"]) for g in data["genres"]])
 
@@ -244,9 +250,9 @@ class RealTMDBProvider(IMediaProvider):
         if genre_query:
             url += f"&with_genres={genre_query}"
 
-        response = self._safe_get(url)
+        response = await self._safe_get(url)
         if response.status_code == 200:
-            return self._process_results(
+            return await self._process_results(
                 response.json().get("results", []),
                 exclude_ids,
                 limit,
@@ -254,12 +260,12 @@ class RealTMDBProvider(IMediaProvider):
             )
         return []
 
-    def get_candidates_for_mood(
+    async def get_candidates_for_mood(
         self, mood_text: str, exclude_ids: List[str], limit: int = 50
     ) -> List[CandidateMedia]:
         # 1. Search TMDB Keyword database using the mood text (ignoring movie titles)
         keyword_url = f"{self.base_url}/search/keyword?query={mood_text}&page=1"
-        response = self._safe_get(keyword_url)
+        response = await self._safe_get(keyword_url)
         keyword_ids = []
         if response.status_code == 200:
             k_results = response.json().get("results", [])
@@ -271,60 +277,64 @@ class RealTMDBProvider(IMediaProvider):
         if keyword_ids:
             with_keywords = "|".join(keyword_ids)
             disc_url = f"{self.base_url}/discover/movie?language=en-US&page=1&with_keywords={with_keywords}"
-            disc_res = self._safe_get(disc_url)
+            disc_res = await self._safe_get(disc_url)
             if disc_res.status_code == 200:
                 results.extend(disc_res.json().get("results", []))
 
         # 3. Always mix in a popular page to ensure we have enough fallback candidates
         page = random.randint(1, 3)
         pop_url = f"{self.base_url}/movie/popular?language=en-US&page={page}"
-        pop_res = self._safe_get(pop_url)
+        pop_res = await self._safe_get(pop_url)
         if pop_res.status_code == 200:
             results.extend(pop_res.json().get("results", []))
 
-        return self._process_results(results, exclude_ids, limit, filter_future=True)
+        return await self._process_results(
+            results, exclude_ids, limit, filter_future=True
+        )
 
-    def get_candidates_for_similar(
+    async def get_candidates_for_similar(
         self, media_id: str, exclude_ids: List[str], limit: int = 50
     ) -> List[CandidateMedia]:
         url = f"{self.base_url}/movie/{media_id}/recommendations?language=en-US&page=1"
-        response = self._safe_get(url)
+        response = await self._safe_get(url)
         results = []
         if response.status_code == 200:
             results.extend(response.json().get("results", []))
 
         if len(results) < limit:
             sim_url = f"{self.base_url}/movie/{media_id}/similar?language=en-US&page=1"
-            sim_res = self._safe_get(sim_url)
+            sim_res = await self._safe_get(sim_url)
             if sim_res.status_code == 200:
                 results.extend(sim_res.json().get("results", []))
 
-        return self._process_results(results, exclude_ids, limit, filter_future=True)
+        return await self._process_results(
+            results, exclude_ids, limit, filter_future=True
+        )
 
-    def search_media(self, query: str) -> List[CandidateMedia]:
+    async def search_media(self, query: str) -> List[CandidateMedia]:
         url = f"{self.base_url}/search/movie?query={query}&include_adult=false&language=en-US&page=1"
-        response = self._safe_get(url)
+        response = await self._safe_get(url)
         if response.status_code == 200:
-            return self._process_results(
+            return await self._process_results(
                 response.json().get("results", []), [], 10, filter_future=False
             )
         return []
 
-    def get_latest_movies(self) -> List[CandidateMedia]:
+    async def get_latest_movies(self) -> List[CandidateMedia]:
         today = datetime.datetime.now().strftime("%Y-%m-%d")
         last_month = (datetime.datetime.now() - datetime.timedelta(days=30)).strftime(
             "%Y-%m-%d"
         )
         url = f"{self.base_url}/discover/movie?language=en-US&page=1&primary_release_date.gte={last_month}&primary_release_date.lte={today}&sort_by=popularity.desc"
 
-        response = self._safe_get(url)
+        response = await self._safe_get(url)
         if response.status_code == 200:
-            return self._process_results(
+            return await self._process_results(
                 response.json().get("results", []), [], 10, filter_future=True
             )
         return []
 
-    def get_upcoming_movies(self) -> List[CandidateMedia]:
+    async def get_upcoming_movies(self) -> List[CandidateMedia]:
         # Only fetch movies strictly in the future
         today = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime(
             "%Y-%m-%d"
@@ -334,9 +344,9 @@ class RealTMDBProvider(IMediaProvider):
         )
         url = f"{self.base_url}/discover/movie?language=en-US&page=1&primary_release_date.gte={today}&primary_release_date.lte={next_month}&sort_by=popularity.desc"
 
-        response = self._safe_get(url)
+        response = await self._safe_get(url)
         if response.status_code == 200:
-            return self._process_results(
+            return await self._process_results(
                 response.json().get("results", []), [], 10, filter_future=False
             )
         return []

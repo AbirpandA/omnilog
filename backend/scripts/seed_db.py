@@ -1,5 +1,17 @@
+"""
+seed_db.py
+
+This script seeds the Supabase database with movie data.
+It uses the TMDB API to fetch movie data and the Supabase API to insert it into the database.
+
+Usage:
+    cd backend
+    source venv/bin/activate
+    python scripts/seed_db.py
+"""
 import sys
 import os
+import asyncio
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import requests
@@ -69,7 +81,7 @@ def insert_to_supabase(candidates):
             inserted += 1
     return inserted
 
-def seed():
+async def seed():
     logger.info("Starting diverse seeding process...")
     total_inserted = 0
     
@@ -78,28 +90,28 @@ def seed():
         logger.info(f"Seeding '{q}'...")
         raw_results = search_tmdb_for_query(q, pages=1)
         # Convert to CandidateMedia using TMDB Provider
-        candidates = tmdb._process_results(raw_results, [], 20, filter_future=True)
+        candidates = await tmdb._process_results(raw_results, [], 20, filter_future=True)
         inserted = insert_to_supabase(candidates)
         total_inserted += inserted
         
     # 2. Add Top Bollywood (India)
     logger.info("Seeding top Bollywood movies...")
     raw_bolly = search_tmdb_for_discover(with_origin_country="IN", pages=3)
-    bolly_cands = tmdb._process_results(raw_bolly, [], 60, filter_future=True)
+    bolly_cands = await tmdb._process_results(raw_bolly, [], 60, filter_future=True)
     total_inserted += insert_to_supabase(bolly_cands)
     
     # 3. Add Top Horror & Sci-Fi
     logger.info("Seeding top Sci-Fi and Horror...")
     raw_genre = search_tmdb_for_discover(with_genres="27,878", pages=3)
-    genre_cands = tmdb._process_results(raw_genre, [], 60, filter_future=True)
+    genre_cands = await tmdb._process_results(raw_genre, [], 60, filter_future=True)
     total_inserted += insert_to_supabase(genre_cands)
     
     # 4. Sync Trending
     logger.info("Syncing latest/upcoming movies...")
     sync_uc = SyncMoviesUseCase(tmdb, supabase)
-    sync_uc.sync_trending_movies()
+    await sync_uc.sync_trending_movies()
     
     logger.info(f"Seeding complete! Inserted {total_inserted} diverse deep cuts.")
 
 if __name__ == "__main__":
-    seed()
+    asyncio.run(seed())

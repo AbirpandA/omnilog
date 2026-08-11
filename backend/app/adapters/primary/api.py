@@ -63,12 +63,12 @@ def get_use_case() -> VibeRecommendationUseCase:
 
 
 @router.post("/recommend", response_model=List[RecommendResponse])
-def get_recommendations(
+async def get_recommendations(
     payload: RecommendRequest,
     top_n: int = 7,
     use_case: VibeRecommendationUseCase = Depends(get_use_case),
 ):
-    results = use_case.execute(
+    results = await use_case.execute(
         seed_ids=payload.seed_ids, exclude_ids=payload.exclude_ids, top_n=top_n
     )
     return [
@@ -85,10 +85,10 @@ def get_recommendations(
 
 
 @router.post("/mood", response_model=List[RecommendResponse])
-def get_mood_recommendations(
+async def get_mood_recommendations(
     payload: MoodRequest, use_case: VibeRecommendationUseCase = Depends(get_use_case)
 ):
-    results = use_case.execute_mood(
+    results = await use_case.execute_mood(
         mood_text=payload.mood, exclude_ids=payload.exclude_ids, top_n=payload.top_n
     )
     return [
@@ -105,10 +105,10 @@ def get_mood_recommendations(
 
 
 @router.get("/movie/{media_id}/similar", response_model=List[RecommendResponse])
-def get_similar_movies(
+async def get_similar_movies(
     media_id: str, use_case: VibeRecommendationUseCase = Depends(get_use_case)
 ):
-    results = use_case.execute_similar(
+    results = await use_case.execute_similar(
         media_id=media_id, exclude_ids=[media_id], top_n=10
     )
     return [
@@ -125,8 +125,10 @@ def get_similar_movies(
 
 
 @router.get("/search", response_model=List[SearchResponse])
-def search(query: str, use_case: VibeRecommendationUseCase = Depends(get_use_case)):
-    results = use_case.media_provider.search_media(query)
+async def search(
+    query: str, use_case: VibeRecommendationUseCase = Depends(get_use_case)
+):
+    results = await use_case.media_provider.search_media(query)
     return [
         SearchResponse(
             media_id=r.id,
@@ -140,8 +142,8 @@ def search(query: str, use_case: VibeRecommendationUseCase = Depends(get_use_cas
 
 
 @router.get("/latest", response_model=List[LatestResponse])
-def get_latest(use_case: VibeRecommendationUseCase = Depends(get_use_case)):
-    results = use_case.media_provider.get_latest_movies()
+async def get_latest(use_case: VibeRecommendationUseCase = Depends(get_use_case)):
+    results = await use_case.media_provider.get_latest_movies()
     return [
         LatestResponse(
             media_id=r.id,
@@ -155,8 +157,8 @@ def get_latest(use_case: VibeRecommendationUseCase = Depends(get_use_case)):
 
 
 @router.get("/upcoming", response_model=List[LatestResponse])
-def get_upcoming(use_case: VibeRecommendationUseCase = Depends(get_use_case)):
-    results = use_case.media_provider.get_upcoming_movies()
+async def get_upcoming(use_case: VibeRecommendationUseCase = Depends(get_use_case)):
+    results = await use_case.media_provider.get_upcoming_movies()
     return [
         LatestResponse(
             media_id=r.id,
@@ -170,10 +172,10 @@ def get_upcoming(use_case: VibeRecommendationUseCase = Depends(get_use_case)):
 
 
 @router.get("/movie/{media_id}", response_model=MediaDetailsResponse)
-def get_movie_details(
+async def get_movie_details(
     media_id: str, use_case: VibeRecommendationUseCase = Depends(get_use_case)
 ):
-    details = use_case.media_provider.get_movie_details(media_id)
+    details = await use_case.media_provider.get_movie_details(media_id)
     if not details:
         raise HTTPException(status_code=404, detail="Movie not found")
     return MediaDetailsResponse(**details)

@@ -15,9 +15,11 @@ THEORY OF OPERATION (Semantic Text Embeddings & Cosine Similarity):
 """
 
 from typing import List
+import asyncio
 from app.domain.models import RecommendationResult, Vector
 from app.ports.secondary.media_provider import IMediaProvider
 from app.ports.secondary.vector_engine import IVectorEngine
+from app.ports.secondary.cache_provider import ICacheProvider
 
 
 class VibeRecommendationUseCase:
@@ -26,9 +28,10 @@ class VibeRecommendationUseCase:
     This class has NO knowledge of HTTP, FastAPI, or TMDB. It relies solely on abstractions.
     """
 
-    def __init__(self, media_provider: IMediaProvider, vector_engine: IVectorEngine):
+    def __init__(self, media_provider: IMediaProvider, vector_engine: IVectorEngine, cache_provider: ICacheProvider = None):
         self.media_provider = media_provider
         self.vector_engine = vector_engine
+        self.cache_provider = cache_provider
 
     def _calculate_centroid(self, vectors: List[Vector]) -> Vector:
         """Calculates the average vector from a list of vectors."""
@@ -47,14 +50,32 @@ class VibeRecommendationUseCase:
 
         return Vector(dimensions=centroid_dims)
 
-    def execute(
+    async def execute(
         self, seed_ids: List[str], exclude_ids: List[str] = None, top_n: int = 7
     ) -> List[RecommendationResult]:
         if exclude_ids is None:
             exclude_ids = []
 
-        # 1. Fetch seed media items
-        seeds = self.media_provider.get_media_by_ids(seed_ids)
+        # 1. Fetch seed media items (check cache first)
+        seeds = []
+        missing_ids = []
+        
+        if self.cache_provider:
+            for sid in seed_ids:
+                cached_seed = await self.cache_provider.get(sid)
+                if cached_seed:
+                    seeds.append(cached_seed)
+                else:
+                    missing_ids.append(sid)
+        else:
+            missing_ids = seed_ids
+            
+        if missing_ids:
+            db_seeds = await self.media_provider.get_media_by_ids(missing_ids)
+            seeds.extend(db_seeds)
+            if self.cache_provider:
+                for s in db_seeds:
+                    await self.cache_provider.set(s.id, s)
         if not seeds:
             return []
 
@@ -64,7 +85,7 @@ class VibeRecommendationUseCase:
 
         # 3. Fetch dynamically profiled candidates (excluding the seeds themselves and any user logs)
         all_excludes = list(set(seed_ids + exclude_ids))
-        candidates = self.media_provider.get_candidates_for_vibe(
+        candidates = await self.media_provider.get_candidates_for_vibe(
             seed_movies=seeds, exclude_ids=all_excludes, limit=100
         )
 
@@ -86,17 +107,17 @@ class VibeRecommendationUseCase:
         results.sort(key=lambda r: r.similarity_score, reverse=True)
         return results[:top_n]
 
-    def execute_mood(
+    async def execute_mood(
         self, mood_text: str, exclude_ids: List[str] = None, top_n: int = 20
     ) -> List[RecommendationResult]:
         if exclude_ids is None:
             exclude_ids = []
 
-        # 1. Convert text to vector
-        mood_vector = self.vector_engine.encode_text(mood_text)
+        # 1. Convert text to vector in background thread to not block event loop
+        mood_vector = await asyncio.to_thread(self.vector_engine.encode_text, mood_text)
 
         # 2. Fetch highly dynamic mood-based candidates
-        candidates = self.media_provider.get_candidates_for_mood(
+        candidates = await self.media_provider.get_candidates_for_mood(
             mood_text=mood_text, exclude_ids=exclude_ids, limit=100
         )
 
@@ -118,13 +139,22 @@ class VibeRecommendationUseCase:
         results.sort(key=lambda r: r.similarity_score, reverse=True)
         return results[:top_n]
 
-    def execute_similar(
+    async def execute_similar(
         self, media_id: str, exclude_ids: List[str] = None, top_n: int = 10
     ) -> List[RecommendationResult]:
         if exclude_ids is None:
             exclude_ids = []
 
-        seeds = self.media_provider.get_media_by_ids([media_id])
+        seeds = []
+        if self.cache_provider:
+            cached_seed = await self.cache_provider.get(media_id)
+            if cached_seed:
+                seeds.append(cached_seed)
+                
+        if not seeds:
+            seeds = await self.media_provider.get_media_by_ids([media_id])
+            if seeds and self.cache_provider:
+                await self.cache_provider.set(seeds[0].id, seeds[0])
         if not seeds:
             return []
 
@@ -132,7 +162,7 @@ class VibeRecommendationUseCase:
 
         all_excludes = list(set([media_id] + exclude_ids))
 
-        candidates = self.media_provider.get_candidates_for_similar(
+        candidates = await self.media_provider.get_candidates_for_similar(
             media_id=media_id, exclude_ids=all_excludes, limit=50
         )
 
