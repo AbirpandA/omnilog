@@ -42,6 +42,10 @@ class RealTMDBProvider(IMediaProvider):
         self.base_url = "https://api.themoviedb.org/3"
         self.image_base_url = "https://image.tmdb.org/t/p/w500"
         self.backdrop_base_url = "https://image.tmdb.org/t/p/w1280"
+        
+        limits = httpx.Limits(max_keepalive_connections=5, max_connections=10)
+        self.http_client = httpx.AsyncClient(timeout=10.0, limits=limits)
+        
         from diskcache import Cache
 
         self.cache = Cache("./tmdb_cache")
@@ -78,19 +82,17 @@ class RealTMDBProvider(IMediaProvider):
         return "Unknown Vibe"
 
     async def _safe_get(self, url: str):
-        try:
-            async with httpx.AsyncClient() as client:
-                return await client.get(url, headers=self.headers, timeout=5.0)
-        except httpx.RequestError as e:
-            print(f"TMDB Network Error: {e}")
+        for attempt in range(3):
+            try:
+                return await self.http_client.get(url, headers=self.headers)
+            except httpx.RequestError as e:
+                print(f"TMDB Network Error (Attempt {attempt+1}): {repr(e)}")
+                await asyncio.sleep(0.5)
 
-            class DummyResponse:
-                status_code = 500
-
-                def json(self):
-                    return {}
-
-            return DummyResponse()
+        class DummyResponse:
+            status_code = 500
+            def json(self): return {}
+        return DummyResponse()
 
     async def _fetch_movie(self, movie_id: str) -> dict:
         url = f"{self.base_url}/movie/{movie_id}?language=en-US"
@@ -166,6 +168,7 @@ class RealTMDBProvider(IMediaProvider):
             description=overview,
             poster_url=poster_url,
             vector=vec,
+            tmdb_rating=tmdb_data.get("vote_average", 0.0),
             vibe_tag=vibe_tag,
         )
         self.cache[movie_id] = candidate
@@ -223,6 +226,7 @@ class RealTMDBProvider(IMediaProvider):
                     description=overview,
                     poster_url=poster_url,
                     vector=vec,
+                    tmdb_rating=r.get("vote_average", 0.0),
                     vibe_tag=vibe_tag,
                 )
                 self.cache[mid] = candidate

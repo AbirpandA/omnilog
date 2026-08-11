@@ -28,6 +28,7 @@ class SupabaseMediaProvider(IMediaProvider):
             title=row["title"],
             description=row["description"],
             poster_url=row.get("poster_url", ""),
+            tmdb_rating=row.get("tmdb_rating", 0.0),
             vibe_tag=row.get("vibe_tag", "Unknown Vibe"),
             vector=Vector(dimensions=[]),  # Not needed for return payload
         )
@@ -60,7 +61,7 @@ class SupabaseMediaProvider(IMediaProvider):
                 "match_movies",
                 {
                     "query_embedding": centroid,
-                    "match_threshold": 0.5,
+                    "match_threshold": 0.15,
                     "match_count": limit,
                     "exclude_ids": exclude_ids,
                 },
@@ -95,7 +96,7 @@ class SupabaseMediaProvider(IMediaProvider):
                 "match_movies",
                 {
                     "query_embedding": mood_vector.dimensions,
-                    "match_threshold": 0.4,
+                    "match_threshold": 0.15,
                     "match_count": limit,
                     "exclude_ids": exclude_ids,
                 },
@@ -154,16 +155,23 @@ class SupabaseMediaProvider(IMediaProvider):
             ).execute()
 
         response = await run_in_threadpool(_execute_rpc)
-
-        data = response.data
-        if not data:
-            return await self.tmdb_provider.get_candidates_for_similar(
-                media_id, exclude_ids, limit
-            )
+        data = response.data or []
 
         candidates = []
         for row in data:
             candidates.append(self._row_to_candidate(row))
+
+        # If our small database couldn't find enough highly similar movies, supplement with TMDB
+        if len(candidates) < limit:
+            # We want to fill the rest of the limit
+            needed = limit - len(candidates)
+            # Exclude what we already found
+            new_excludes = exclude_ids + [c.id for c in candidates]
+            tmdb_candidates = await self.tmdb_provider.get_candidates_for_similar(
+                media_id, new_excludes, needed
+            )
+            candidates.extend(tmdb_candidates)
+
         return candidates
 
     # ---------------------------------------------------------

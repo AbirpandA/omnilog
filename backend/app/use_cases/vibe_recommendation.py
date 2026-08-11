@@ -16,6 +16,7 @@ THEORY OF OPERATION (Semantic Text Embeddings & Cosine Similarity):
 
 from typing import List
 import asyncio
+import random
 from app.domain.models import RecommendationResult, Vector
 from app.ports.secondary.media_provider import IMediaProvider
 from app.ports.secondary.vector_engine import IVectorEngine
@@ -91,8 +92,16 @@ class VibeRecommendationUseCase:
 
         # 4. Score each candidate against the target vibe
         results = []
-        for candidate in candidates:
-            score = self.vector_engine.cosine_similarity(target_vibe, candidate.vector)
+        for i, candidate in enumerate(candidates):
+            if candidate.vector.dimensions:
+                base_score = self.vector_engine.cosine_similarity(target_vibe, candidate.vector)
+            else:
+                # Fallback: DB already sorted them by similarity, assign a declining score based on rank
+                base_score = max(0.99 - (i * 0.01), 0.1)
+            
+            jitter = random.uniform(0.95, 1.05)
+            score = min(base_score * jitter, 1.0)
+            
             results.append(
                 RecommendationResult(
                     media_id=candidate.id,
@@ -100,12 +109,26 @@ class VibeRecommendationUseCase:
                     description=candidate.description,
                     poster_url=candidate.poster_url,
                     similarity_score=score,
+                    tmdb_rating=candidate.tmdb_rating,
+                    vibe_tag=candidate.vibe_tag,
                 )
             )
 
-        # 5. Sort by highest similarity and return top N
+        # 5. Sort by highest similarity
         results.sort(key=lambda r: r.similarity_score, reverse=True)
-        return results[:top_n]
+        
+        # Take the top 30 highly matched candidates
+        top_candidates = results[:30]
+        
+        # Randomly sample 'top_n' from the top 30 to provide massive variety on refresh
+        if len(top_candidates) > top_n:
+            final_selection = random.sample(top_candidates, top_n)
+        else:
+            final_selection = top_candidates
+            
+        # Re-sort the final selection so the best matches in the sample appear first
+        final_selection.sort(key=lambda r: r.similarity_score, reverse=True)
+        return final_selection
 
     async def execute_mood(
         self, mood_text: str, exclude_ids: List[str] = None, top_n: int = 20
@@ -123,8 +146,16 @@ class VibeRecommendationUseCase:
 
         # 3. Score each candidate against the mood vector
         results = []
-        for candidate in candidates:
-            score = self.vector_engine.cosine_similarity(mood_vector, candidate.vector)
+        for i, candidate in enumerate(candidates):
+            if candidate.vector.dimensions:
+                base_score = self.vector_engine.cosine_similarity(mood_vector, candidate.vector)
+            else:
+                # Fallback: DB already sorted them by similarity, assign a declining score based on rank
+                base_score = max(0.99 - (i * 0.01), 0.1)
+            
+            jitter = random.uniform(0.95, 1.05)
+            score = min(base_score * jitter, 1.0)
+            
             results.append(
                 RecommendationResult(
                     media_id=candidate.id,
@@ -132,12 +163,22 @@ class VibeRecommendationUseCase:
                     description=candidate.description,
                     poster_url=candidate.poster_url,
                     similarity_score=score,
+                    tmdb_rating=candidate.tmdb_rating,
+                    vibe_tag=candidate.vibe_tag,
                 )
             )
 
-        # 4. Sort and return
+        # 4. Sort and sample for variety
         results.sort(key=lambda r: r.similarity_score, reverse=True)
-        return results[:top_n]
+        
+        top_candidates = results[:30]
+        if len(top_candidates) > top_n:
+            final_selection = random.sample(top_candidates, top_n)
+        else:
+            final_selection = top_candidates
+            
+        final_selection.sort(key=lambda r: r.similarity_score, reverse=True)
+        return final_selection
 
     async def execute_similar(
         self, media_id: str, exclude_ids: List[str] = None, top_n: int = 10
@@ -158,26 +199,36 @@ class VibeRecommendationUseCase:
         if not seeds:
             return []
 
-        target_vibe = seeds[0].vector
-
+        centroid = seeds[0].vector.dimensions
         all_excludes = list(set([media_id] + exclude_ids))
 
         candidates = await self.media_provider.get_candidates_for_similar(
             media_id=media_id, exclude_ids=all_excludes, limit=50
         )
 
-        results = []
-        for candidate in candidates:
-            score = self.vector_engine.cosine_similarity(target_vibe, candidate.vector)
-            results.append(
+        # 3. Compute Cosine Similarity
+        recommendations = []
+        for i, cand in enumerate(candidates):
+            if cand.vector.dimensions:
+                base_score = self.vector_engine.cosine_similarity(seeds[0].vector, cand.vector)
+            else:
+                # Fallback: DB already sorted them by similarity, assign a declining score based on rank
+                base_score = max(0.99 - (i * 0.01), 0.1)
+            
+            # Apply a +/- 5% random jitter to shuffle closely matched movies when refreshed
+            jitter = random.uniform(0.95, 1.05)
+            score = min(base_score * jitter, 1.0)
+            
+            recommendations.append(
                 RecommendationResult(
-                    media_id=candidate.id,
-                    title=candidate.title,
-                    description=candidate.description,
-                    poster_url=candidate.poster_url,
+                    media_id=cand.id,
+                    title=cand.title,
+                    description=cand.description,
+                    poster_url=cand.poster_url,
                     similarity_score=score,
+                    tmdb_rating=cand.tmdb_rating,
+                    vibe_tag=cand.vibe_tag,
                 )
             )
-
-        results.sort(key=lambda r: r.similarity_score, reverse=True)
-        return results[:top_n]
+        recommendations.sort(key=lambda r: r.similarity_score, reverse=True)
+        return recommendations[:top_n]
