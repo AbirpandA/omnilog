@@ -18,6 +18,7 @@ class CandidateMedia:
     description: str
     poster_url: str
     vector: Vector
+    tmdb_rating: float = 0.0
     vibe_tag: str = ""
 
 
@@ -30,4 +31,5 @@ class RecommendationResult:
     description: str
     poster_url: str
     similarity_score: float
+    tmdb_rating: float = 0.0
     vibe_tag: str = ""
