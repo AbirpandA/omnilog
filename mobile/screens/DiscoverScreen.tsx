@@ -24,6 +24,7 @@ import {
   ActivityIndicator,
   SafeAreaView,
   Platform,
+  RefreshControl,
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import {
@@ -65,21 +66,29 @@ export function DiscoverScreen({ navigation }: Props) {
 
   const seedIds = logs.map((l) => l.mediaId);
 
-  const { data: recommendations = [], isLoading: loadingRecs } = useQuery({
+  const { data: recommendations = [], isLoading: loadingRecs, refetch: refetchRecs } = useQuery({
     queryKey: ["recommendations", seedIds],
     queryFn: () => fetchRecommendations(seedIds),
     enabled: seedIds.length > 0,
   });
 
-  const { data: latest = [], isLoading: loadingLatest } = useQuery({
+  const { data: latest = [], isLoading: loadingLatest, refetch: refetchLatest } = useQuery({
     queryKey: ["latest"],
     queryFn: fetchLatestMovies,
   });
 
-  const { data: upcoming = [], isLoading: loadingUpcoming } = useQuery({
+  const { data: upcoming = [], isLoading: loadingUpcoming, refetch: refetchUpcoming } = useQuery({
     queryKey: ["upcoming"],
     queryFn: fetchUpcomingMovies,
   });
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([refetchRecs(), refetchLatest(), refetchUpcoming()]);
+    setRefreshing(false);
+  }, [refetchRecs, refetchLatest, refetchUpcoming]);
 
   const { data: searchResults = [], isLoading: loadingSearch } = useQuery({
     queryKey: ["search", searchQuery, searchType],
@@ -277,6 +286,13 @@ export function DiscoverScreen({ navigation }: Props) {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#FFD700"
+            />
+          }
         >
           {/* Suggestions for You Row */}
           <View style={styles.sectionHeader}>
