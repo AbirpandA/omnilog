@@ -1,6 +1,12 @@
-import { db } from './index';
+import { db } from "./index";
 
-export type ReactionType = 'lame' | 'okay' | 'pure gold' | 'Absolute cinema' | 'watchlist' | 'collection';
+export type ReactionType =
+  | "lame"
+  | "okay"
+  | "pure gold"
+  | "Absolute cinema"
+  | "watchlist"
+  | "collection";
 
 export interface MediaItem {
   id: string;
@@ -28,10 +34,17 @@ export interface LogEntry {
 
 // Helper to generate a unique ID
 function uuid(): string {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  return (
+    Math.random().toString(36).substring(2, 15) +
+    Math.random().toString(36).substring(2, 15)
+  );
 }
 
-export function insertLog(media: MediaItem, reaction: ReactionType, notes?: string): void {
+export function insertLog(
+  media: MediaItem,
+  reaction: ReactionType,
+  notes?: string,
+): void {
   // Use a transaction to ensure both inserts succeed together
   db.withTransactionSync(() => {
     // 1. Insert or Replace Media Item (in case they rate something again)
@@ -46,8 +59,8 @@ export function insertLog(media: MediaItem, reaction: ReactionType, notes?: stri
         media.releaseYear || null,
         media.runtime || null,
         media.director || null,
-        media.description || null
-      ]
+        media.description || null,
+      ],
     );
 
     // 2. Delete any existing reaction for this media to prevent duplicates
@@ -56,11 +69,11 @@ export function insertLog(media: MediaItem, reaction: ReactionType, notes?: stri
     // 3. Insert User Reaction
     const reactionId = uuid();
     const timestamp = Date.now();
-    
+
     db.runSync(
       `INSERT INTO user_reactions (id, media_id, reaction, notes, updated_at) 
        VALUES (?, ?, ?, ?, ?)`,
-      [reactionId, media.id, reaction, notes || null, timestamp]
+      [reactionId, media.id, reaction, notes || null, timestamp],
     );
   });
 }
@@ -69,7 +82,7 @@ export function updateLogNotes(mediaId: string, notes: string): void {
   const timestamp = Date.now();
   db.runSync(
     `UPDATE user_reactions SET notes = ?, updated_at = ? WHERE media_id = ?`,
-    [notes, timestamp, mediaId]
+    [notes, timestamp, mediaId],
   );
 }
 
@@ -89,9 +102,9 @@ export function getAllLogs(): LogEntry[] {
         mi.description
      FROM user_reactions ur
      JOIN media_items mi ON ur.media_id = mi.id
-     ORDER BY ur.updated_at DESC`
+     ORDER BY ur.updated_at DESC`,
   ) as LogEntry[];
-  
+
   return result;
 }
 
@@ -111,9 +124,9 @@ export function getLogByMediaId(mediaId: string): LogEntry | null {
      FROM user_reactions ur
      JOIN media_items mi ON ur.media_id = mi.id
      WHERE ur.media_id = ?`,
-    [mediaId]
+    [mediaId],
   ) as LogEntry | undefined;
-  
+
   return result || null;
 }
 

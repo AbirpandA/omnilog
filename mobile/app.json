@@ -11,8 +11,6 @@
     "android": {
       "package": "com.abirp.mobile"
     },
-    "plugins": [
-      "expo-sqlite"
-    ]
+    "plugins": ["expo-sqlite"]
   }
 }

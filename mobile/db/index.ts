@@ -1,6 +1,6 @@
-import * as SQLite from 'expo-sqlite';
+import * as SQLite from "expo-sqlite";
 
-export const db = SQLite.openDatabaseSync('OmniLog.db');
+export const db = SQLite.openDatabaseSync("OmniLog.db");
 
 export function initDatabase() {
   db.execSync(`
@@ -24,7 +24,7 @@ export function initDatabase() {
       FOREIGN KEY (media_id) REFERENCES media_items(id)
     );
   `);
-  
+
   // Quick migration in case the table exists without the description column
   try {
     db.execSync("ALTER TABLE media_items ADD COLUMN description TEXT;");

@@ -1,13 +1,13 @@
 /**
  * DiscoverScreen.tsx
- * 
+ *
  * ARCHITECTURE:
  * This component acts as the main gateway to the Stateless AI Proxy (Backend).
- * It embraces the Local-First philosophy by retrieving the user's logged movies 
- * entirely from the local SQLite database (`getAllLogs`). It then sends a small, 
+ * It embraces the Local-First philosophy by retrieving the user's logged movies
+ * entirely from the local SQLite database (`getAllLogs`). It then sends a small,
  * anonymous list of these movie IDs to the backend to calculate the "Vibe" Match
  * using Semantic Text Embeddings without storing any user state on the server.
- * 
+ *
  * DESIGN:
  * Strictly adheres to Dark Mode ONLY aesthetics.
  * Utilizes Glassmorphism and rounded MacBook/iOS-like UI elements.
