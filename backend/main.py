@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.adapters.secondary.sentence_transformer_engine import SentenceTransformerEngine
 from app.adapters.secondary.real_tmdb_provider import RealTMDBProvider
 from app.adapters.secondary.supabase_media_provider import SupabaseMediaProvider
+from app.adapters.secondary.redis_cache_provider import RedisCacheProvider
 from app.use_cases.vibe_recommendation import VibeRecommendationUseCase
 from app.adapters.primary.api import router, get_use_case
 import os
@@ -43,11 +44,13 @@ def startup_event():
     vector_engine = SentenceTransformerEngine('all-MiniLM-L6-v2')
     tmdb_provider = RealTMDBProvider(vector_engine)
     media_provider = SupabaseMediaProvider(vector_engine, tmdb_provider)
+    cache_provider = RedisCacheProvider()
     
     # 2. Inject Adapters into the Use Case
     use_case = VibeRecommendationUseCase(
         media_provider=media_provider,
-        vector_engine=vector_engine
+        vector_engine=vector_engine,
+        cache_provider=cache_provider
     )
     
     # 3. Store in App State for FastAPI injection
