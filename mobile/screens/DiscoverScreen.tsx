@@ -58,6 +58,17 @@ export function DiscoverScreen({ navigation }: Props) {
   const [searchType, setSearchType] = useState<"title" | "mood">("title");
   const [logs, setLogs] = useState<LogEntry[]>([]);
 
+  const VIBE_PRESETS = [
+    "Cyberpunk Dystopia",
+    "Cozy Autumn Romance",
+    "High-Octane Heist",
+    "Mind-Bending Puzzle",
+    "Wholesome Animation",
+    "Gritty Noir",
+    "Epic Fantasy Adventure",
+    "Spine-Chilling Horror",
+  ];
+
   useFocusEffect(
     React.useCallback(() => {
       setLogs(getAllLogs());
@@ -294,6 +305,27 @@ export function DiscoverScreen({ navigation }: Props) {
             />
           }
         >
+          {/* Vibe Presets Row */}
+          {searchType === "mood" && (
+            <View style={{ paddingHorizontal: 24, marginBottom: 32 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}>
+                <Sparkles color="#b829ea" size={20} />
+                <Text style={styles.sectionTitle}>Explore Vibes</Text>
+              </View>
+              <View style={styles.chipsContainer}>
+                {VIBE_PRESETS.map((vibe) => (
+                  <TouchableOpacity
+                    key={vibe}
+                    style={styles.vibeChip}
+                    onPress={() => setSearchQuery(vibe)}
+                  >
+                    <Text style={styles.vibeChipText}>{vibe}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+
           {/* Suggestions for You Row */}
           <View style={styles.sectionHeader}>
             <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -436,6 +468,25 @@ const styles = StyleSheet.create({
   typeButtonActive: { backgroundColor: "#fff", borderColor: "#fff" },
   typeButtonText: { color: "#888", fontWeight: "600", fontSize: 14 },
   typeButtonTextActive: { color: "#000" },
+
+  chipsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  vibeChip: {
+    backgroundColor: "#1a1a1a",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#333",
+  },
+  vibeChipText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
 
   scrollContent: { paddingVertical: 24, paddingBottom: 120 },
 
