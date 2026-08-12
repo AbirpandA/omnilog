@@ -24,6 +24,8 @@ import { DiscoverScreen } from "./screens/DiscoverScreen";
 import { DetailsScreen, RootStackParamList } from "./screens/DetailsScreen";
 import { ExpandedSuggestionsScreen } from "./screens/ExpandedSuggestionsScreen";
 import { TasteProfileScreen } from "./screens/TasteProfileScreen";
+import { OnboardingScreen } from "./screens/OnboardingScreen";
+import { getAllLogs } from "./db/queries";
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -92,11 +94,13 @@ function HomeTabs() {
 
 export default function App() {
   const [dbInitialized, setDbInitialized] = useState(false);
+  const [logsCount, setLogsCount] = useState(0);
 
   useEffect(() => {
     try {
       initDatabase();
       setDbInitialized(true);
+      setLogsCount(getAllLogs().length);
       logger.info("Database initialized successfully.");
     } catch (e) {
       logger.error("Database init failed:", e);
@@ -132,7 +136,11 @@ export default function App() {
       >
         <NavigationContainer theme={DarkTheme}>
           <StatusBar style="light" />
-          <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Navigator
+            screenOptions={{ headerShown: false }}
+            initialRouteName={logsCount === 0 ? "Onboarding" : "HomeTabs"}
+          >
+            <Stack.Screen name="Onboarding" component={OnboardingScreen} />
             <Stack.Screen name="HomeTabs" component={HomeTabs} />
             <Stack.Screen name="Details" component={DetailsScreen} />
             <Stack.Screen

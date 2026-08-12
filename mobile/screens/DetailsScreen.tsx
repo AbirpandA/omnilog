@@ -38,6 +38,7 @@ import { ReactionConfig, ReactionType } from "../utils/constants";
 
 export type RootStackParamList = {
   HomeTabs: undefined;
+  Onboarding: undefined;
   Details: {
     media_id: string;
     title: string;
